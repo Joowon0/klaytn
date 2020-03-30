@@ -336,7 +336,7 @@ func NewDatabaseWithCache(diskDB database.DBManager, cacheSizeMB int, daBlockNum
 		var err error
 		trieNodeCache, err = ristretto.NewCache(&ristretto.Config{
 			NumCounters: 1 << 6,
-			MaxCost:     int64(cacheSizeMB),
+			MaxCost:     int64(cacheSizeMB * 1024 * 1024 / 160), // max number of entries
 			BufferItems: 64,
 			Metrics:     true,
 		})
@@ -447,7 +447,7 @@ func (db *Database) getCachedNode(hash common.Hash) []byte {
 // setCachedNode stores an encoded node to the trie node cache if enabled.
 func (db *Database) setCachedNode(hash, enc []byte) {
 	if db.trieNodeCache != nil {
-		if isSet := db.trieNodeCache.Set(hash, enc, 0); isSet {
+		if isSet := db.trieNodeCache.Set(hash, enc, 1); isSet {
 			memcacheCleanMissMeter.Mark(1)
 			memcacheCleanWriteMeter.Mark(int64(len(enc)))
 		}
@@ -682,7 +682,7 @@ func (db *Database) Cap(limit common.StorageSize) error {
 		}
 
 		if db.trieNodeCache != nil {
-			db.trieNodeCache.Set(oldest[:], enc, 0)
+			db.trieNodeCache.Set(oldest[:], enc, 1)
 		}
 		// Iterate to the next flush item, or abort if the size cap was achieved. Size
 		// is the total size, including both the useful cached data (hash -> blob), as
@@ -813,7 +813,7 @@ func (db *Database) writeBatchNodes(node common.Hash) error {
 		return err
 	}
 	if db.trieNodeCache != nil {
-		db.trieNodeCache.Set(node[:], enc, 0)
+		db.trieNodeCache.Set(node[:], enc, 1)
 	}
 
 	return nil
@@ -911,7 +911,7 @@ func (db *Database) commit(hash common.Hash, resultCh chan<- commitResult) {
 	resultCh <- commitResult{hash[:], enc}
 
 	if db.trieNodeCache != nil {
-		db.trieNodeCache.Set(hash[:], enc, 0)
+		db.trieNodeCache.Set(hash[:], enc, 1)
 	}
 }
 
