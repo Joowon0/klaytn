@@ -23,7 +23,7 @@ package statedb
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/allegro/bigcache"
+	"github.com/dgraph-io/ristretto"
 	"github.com/klaytn/klaytn/common"
 	"github.com/klaytn/klaytn/log"
 	"github.com/klaytn/klaytn/ser/rlp"
@@ -49,12 +49,26 @@ var (
 	memcacheCommitNodesMeter = metrics.NewRegisteredMeter("trie/memcache/commit/nodes", nil)
 	memcacheCommitSizeMeter  = metrics.NewRegisteredMeter("trie/memcache/commit/size", nil)
 
-	memcacheCleanHitMeter      = metrics.NewRegisteredMeter("trie/memcache/clean/hit", nil)
-	memcacheCleanMissMeter     = metrics.NewRegisteredMeter("trie/memcache/clean/miss", nil)
-	memcacheCleanReadMeter     = metrics.NewRegisteredMeter("trie/memcache/clean/read", nil)
-	memcacheCleanWriteMeter    = metrics.NewRegisteredMeter("trie/memcache/clean/write", nil)
-	memcacheCleanLengthGauge   = metrics.NewRegisteredGauge("trie/memcache/clean/length", nil)
-	memcacheCleanCapacityGauge = metrics.NewRegisteredGauge("trie/memcache/clean/capacity", nil)
+	memcacheCleanHitMeter   = metrics.NewRegisteredMeter("trie/memcache/clean/hit", nil)
+	memcacheCleanMissMeter  = metrics.NewRegisteredMeter("trie/memcache/clean/miss", nil)
+	memcacheCleanReadMeter  = metrics.NewRegisteredMeter("trie/memcache/clean/read", nil)
+	memcacheCleanWriteMeter = metrics.NewRegisteredMeter("trie/memcache/clean/write", nil)
+
+	memcacheRistrettoHitMeter          = metrics.NewRegisteredGauge("trie/memcache/ristretto/hit", nil)
+	memcacheRistrettoMissMeter         = metrics.NewRegisteredGauge("trie/memcache/ristretto/miss", nil)
+	memcacheRistrettoKeysAddedMeter    = metrics.NewRegisteredGauge("trie/memcache/ristretto/keys/added", nil)
+	memcacheRistrettoKeysUpdatedMeter  = metrics.NewRegisteredGauge("trie/memcache/ristretto/keys/updated", nil)
+	memcacheRistrettoKeysEvictedMeter  = metrics.NewRegisteredGauge("trie/memcache/ristretto/keys/evicted", nil)
+	memcacheRistrettoCostAddedMeter    = metrics.NewRegisteredGauge("trie/memcache/ristretto/cost/added", nil)
+	memcacheRistrettoCostEvictedMeter  = metrics.NewRegisteredGauge("trie/memcache/ristretto/cost/evicted", nil)
+	memcacheRistrettoSetsDroppedMeter  = metrics.NewRegisteredGauge("trie/memcache/ristretto/sets/dropped", nil)
+	memcacheRistrettoSetsRejectedMeter = metrics.NewRegisteredGauge("trie/memcache/ristretto/sets/rejected", nil)
+	memcacheRistrettoGetsDroppedMeter  = metrics.NewRegisteredGauge("trie/memcache/ristretto/gets/dropped", nil)
+	memcacheRistrettoGetsKeptMeter     = metrics.NewRegisteredGauge("trie/memcache/ristretto/gets/kept", nil)
+	memcacheRistrettoRatioMeter        = metrics.NewRegisteredGauge("trie/memcache/ristretto/ratio", nil)
+
+	//memcacheCleanLengthGauge   = metrics.NewRegisteredGauge("trie/memcache/clean/length", nil)
+	//memcacheCleanCapacityGauge = metrics.NewRegisteredGauge("trie/memcache/clean/capacity", nil)
 
 	memcacheNodesGauge = metrics.NewRegisteredGauge("trie/memcache/nodes", nil)
 
@@ -109,7 +123,7 @@ type Database struct {
 
 	lock sync.RWMutex
 
-	trieNodeCache *bigcache.BigCache // GC friendly memory cache of trie node RLPs
+	trieNodeCache *ristretto.Cache // GC friendly memory cache of trie node RLPs
 
 	dataArchivingBlockNum uint64
 }
@@ -317,19 +331,20 @@ func NewDatabase(diskDB database.DBManager) *Database {
 // before its written out to disk or garbage collected. It also acts as a read cache
 // for nodes loaded from disk.
 func NewDatabaseWithCache(diskDB database.DBManager, cacheSizeMB int, daBlockNum uint64) *Database {
-	var trieNodeCache *bigcache.BigCache
+	var trieNodeCache *ristretto.Cache
 	if cacheSizeMB > 0 {
-		maxEntrySizeByte := 512
-		maxEntriesInWindow := cacheSizeMB * 1024 * 1024 / maxEntrySizeByte
-		trieNodeCache, _ = bigcache.NewBigCache(bigcache.Config{
-			Shards:             1024,
-			LifeWindow:         time.Hour * 24 * 365 * 200,
-			MaxEntriesInWindow: maxEntriesInWindow,
-			MaxEntrySize:       maxEntrySizeByte,
-			HardMaxCacheSize:   cacheSizeMB,
-			Hasher:             trieNodeHasher{},
+		var err error
+		trieNodeCache, err = ristretto.NewCache(&ristretto.Config{
+			NumCounters: 1 << 6,
+			MaxCost:     int64(cacheSizeMB),
+			BufferItems: 64,
+			Metrics:     true,
 		})
-		logger.Info("Initialize BigCache", "HardMaxCacheSize", cacheSizeMB, "MaxEntrySize", maxEntrySizeByte, "MaxEntriesInWindow", maxEntriesInWindow)
+
+		if err != nil {
+			logger.Error("Unable to initialize ristretto")
+		}
+		logger.Info("Initialize ristretto", "NumCounters", 1<<6, "MaxCost", cacheSizeMB, "BufferItems", 64)
 
 	}
 	return &Database{
@@ -419,10 +434,11 @@ func (db *Database) insertPreimage(hash common.Hash, preimage []byte) {
 // getCachedNode finds an encoded node in the trie node cache if enabled.
 func (db *Database) getCachedNode(hash common.Hash) []byte {
 	if db.trieNodeCache != nil {
-		if enc, err := db.trieNodeCache.Get(string(hash[:])); err == nil && enc != nil {
+		if enc, isExist := db.trieNodeCache.Get(hash[:]); isExist == true && enc != nil {
+			encByte := enc.([]byte)
 			memcacheCleanHitMeter.Mark(1)
-			memcacheCleanReadMeter.Mark(int64(len(enc)))
-			return enc
+			memcacheCleanReadMeter.Mark(int64(len(encByte)))
+			return encByte
 		}
 	}
 	return nil
@@ -431,9 +447,10 @@ func (db *Database) getCachedNode(hash common.Hash) []byte {
 // setCachedNode stores an encoded node to the trie node cache if enabled.
 func (db *Database) setCachedNode(hash, enc []byte) {
 	if db.trieNodeCache != nil {
-		db.trieNodeCache.Set(string(hash), enc)
-		memcacheCleanMissMeter.Mark(1)
-		memcacheCleanWriteMeter.Mark(int64(len(enc)))
+		if isSet := db.trieNodeCache.Set(hash, enc, 0); isSet {
+			memcacheCleanMissMeter.Mark(1)
+			memcacheCleanWriteMeter.Mark(int64(len(enc)))
+		}
 	}
 }
 
@@ -665,7 +682,7 @@ func (db *Database) Cap(limit common.StorageSize) error {
 		}
 
 		if db.trieNodeCache != nil {
-			db.trieNodeCache.Set(string(oldest[:]), enc)
+			db.trieNodeCache.Set(oldest[:], enc, 0)
 		}
 		// Iterate to the next flush item, or abort if the size cap was achieved. Size
 		// is the total size, including both the useful cached data (hash -> blob), as
@@ -796,7 +813,7 @@ func (db *Database) writeBatchNodes(node common.Hash) error {
 		return err
 	}
 	if db.trieNodeCache != nil {
-		db.trieNodeCache.Set(string(node[:]), enc)
+		db.trieNodeCache.Set(node[:], enc, 0)
 	}
 
 	return nil
@@ -894,7 +911,7 @@ func (db *Database) commit(hash common.Hash, resultCh chan<- commitResult) {
 	resultCh <- commitResult{hash[:], enc}
 
 	if db.trieNodeCache != nil {
-		db.trieNodeCache.Set(string(hash[:]), enc)
+		db.trieNodeCache.Set(hash[:], enc, 0)
 	}
 }
 
@@ -929,10 +946,6 @@ func (db *Database) Size() (common.StorageSize, common.StorageSize) {
 	// counted. For every useful node, we track 2 extra hashes as the flushlist.
 	var flushlistSize = common.StorageSize((len(db.nodes) - 1) * 2 * common.HashLength)
 	return db.nodesSize + flushlistSize, db.preimagesSize
-}
-
-func (db *Database) CacheSize() int {
-	return db.trieNodeCache.Capacity()
 }
 
 // verifyIntegrity is a debug method to iterate over the entire trie stored in
@@ -1023,7 +1036,17 @@ func (db *Database) getLastNodeHashInFlushList() common.Hash {
 func (db *Database) UpdateMetricNodes() {
 	memcacheNodesGauge.Update(int64(len(db.nodes)))
 	if db.trieNodeCache != nil {
-		memcacheCleanLengthGauge.Update(int64(db.trieNodeCache.Len()))
-		memcacheCleanCapacityGauge.Update(int64(db.trieNodeCache.Capacity()))
+		memcacheRistrettoHitMeter.Update(int64(db.trieNodeCache.Metrics.Hits()))
+		memcacheRistrettoMissMeter.Update(int64(db.trieNodeCache.Metrics.Misses()))
+		memcacheRistrettoKeysAddedMeter.Update(int64(db.trieNodeCache.Metrics.KeysAdded()))
+		memcacheRistrettoKeysUpdatedMeter.Update(int64(db.trieNodeCache.Metrics.KeysUpdated()))
+		memcacheRistrettoKeysEvictedMeter.Update(int64(db.trieNodeCache.Metrics.KeysEvicted()))
+		memcacheRistrettoCostAddedMeter.Update(int64(db.trieNodeCache.Metrics.CostAdded()))
+		memcacheRistrettoCostEvictedMeter.Update(int64(db.trieNodeCache.Metrics.CostEvicted()))
+		memcacheRistrettoSetsDroppedMeter.Update(int64(db.trieNodeCache.Metrics.SetsDropped()))
+		memcacheRistrettoSetsRejectedMeter.Update(int64(db.trieNodeCache.Metrics.SetsRejected()))
+		memcacheRistrettoGetsDroppedMeter.Update(int64(db.trieNodeCache.Metrics.GetsDropped()))
+		memcacheRistrettoGetsKeptMeter.Update(int64(db.trieNodeCache.Metrics.GetsKept()))
+		memcacheRistrettoRatioMeter.Update(int64(db.trieNodeCache.Metrics.Ratio()))
 	}
 }
