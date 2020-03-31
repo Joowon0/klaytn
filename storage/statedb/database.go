@@ -336,7 +336,7 @@ func NewDatabaseWithCache(diskDB database.DBManager, cacheSizeMB int, daBlockNum
 		var err error
 		trieNodeCache, err = ristretto.NewCache(&ristretto.Config{
 			NumCounters: 1 << 6,
-			MaxCost:     int64(cacheSizeMB * 1024 * 1024 / 160), // max number of entries
+			MaxCost:     int64(cacheSizeMB * 1024 * 1024 / 200), // max number of entries
 			BufferItems: 64,
 			Metrics:     true,
 		})
