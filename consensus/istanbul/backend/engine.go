@@ -374,8 +374,8 @@ func (sb *backend) Finalize(chain consensus.ChainReader, header *types.Header, s
 			logger.Trace(logMsg, "header.Number", header.Number.Uint64(), "node address", sb.address, "rewardbase", header.Rewardbase)
 		}
 
-		stakingInfo := reward.GetStakingManager().GetStakingInfo(header.Number.Uint64())
-		if reward.GetStakingManager().IsActivated() {
+		stakingInfo := reward.GetStakingInfo(header.Number.Uint64())
+		if reward.IsStakingManagerActivated() {
 			if stakingInfo != nil {
 				kirAddr = stakingInfo.KIRAddr
 				pocAddr = stakingInfo.PoCAddr
@@ -641,7 +641,7 @@ func (sb *backend) snapshot(chain consensus.ChainReader, number uint64, hash com
 		// Let's refresh proposers in Snapshot_N using previous proposersUpdateInterval block for N+1, if not updated yet.
 		pHeader := chain.GetHeaderByNumber(params.CalcProposerBlockNumber(snap.Number + 1))
 		if pHeader != nil {
-			if err := snap.ValSet.Refresh(pHeader.Hash(), pHeader.Number.Uint64(), reward.GetStakingManager()); err != nil {
+			if err := snap.ValSet.Refresh(pHeader.Hash(), pHeader.Number.Uint64()); err != nil {
 				// There are three error cases and they just don't refresh proposers
 				// (1) no validator at all
 				// (2) invalid formatted hash

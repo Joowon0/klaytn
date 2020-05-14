@@ -591,7 +591,7 @@ func (s *CN) Start(srvr p2p.Server) error {
 		s.lesServer.Start(srvr)
 	}
 	if reward.GetStakingManager() != nil {
-		reward.GetStakingManager().Subscribe()
+		reward.SubscribeStakingInfo()
 	}
 	return nil
 }
@@ -600,7 +600,7 @@ func (s *CN) Start(srvr p2p.Server) error {
 // Klaytn protocol.
 func (s *CN) Stop() error {
 	if reward.GetStakingManager() != nil {
-		reward.GetStakingManager().Unsubscribe()
+		reward.UnsubscribeStakingManager()
 	}
 	s.bloomIndexer.Close()
 	s.blockchain.Stop()
