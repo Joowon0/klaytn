@@ -34,6 +34,7 @@ import (
 	"github.com/klaytn/klaytn/event"
 	"github.com/klaytn/klaytn/log"
 	"github.com/klaytn/klaytn/params"
+	"github.com/klaytn/klaytn/reward"
 	"github.com/klaytn/klaytn/ser/rlp"
 	"github.com/klaytn/klaytn/storage/database"
 	"github.com/klaytn/klaytn/storage/statedb"
@@ -276,6 +277,18 @@ func (td *stateTrieMigrationDB) ReadPreimage(hash common.Hash) []byte {
 }
 
 func (bc *BlockChain) migrateState(rootHash common.Hash) error {
+	// This makes sure that current and previous staking information is stored in DB.
+	// Staking information is needed when creating a block.
+	// Staking information might be lost when a node restarts while migrating.
+	//blockNum := bc.GetBlockNumber(rootHash)
+	//stakingManager := reward.GetStakingManager()
+	//if _, err := stakingManager.UpdateStakingInfo(*blockNum); err != nil {
+	//	return err
+	//}
+	//if _, err := stakingManager.UpdateStakingInfo(*blockNum - params.StakingUpdateInterval()); err != nil {
+	//	return err
+	//}
+
 	bc.wg.Add(1)
 	defer bc.wg.Done()
 
