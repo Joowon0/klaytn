@@ -23,6 +23,7 @@ import (
 	"github.com/klaytn/klaytn/common"
 	"github.com/klaytn/klaytn/event"
 	"github.com/klaytn/klaytn/params"
+	"sync"
 )
 
 const (
@@ -55,16 +56,37 @@ type StakingManager struct {
 	isActivated          bool
 }
 
+var (
+	once           sync.Once
+	stakingManager *StakingManager
+)
+
+// NewStakingManager creates and returns StakingManager.
+//
+// On the first call, a StakingManager is created with given parameters.
+// From next calls, the existing StakingManager is returned. (Parameters
+// from the next calls will not affect.)
 func NewStakingManager(bc blockChain, gh governanceHelper, db stakingInfoDB) *StakingManager {
-	return &StakingManager{
-		addressBookConnector: newAddressBookConnector(bc, gh),
-		stakingInfoCache:     newStakingInfoCache(),
-		stakingInfoDB:        db,
-		governanceHelper:     gh,
-		blockchain:           bc,
-		chainHeadChan:        make(chan blockchain.ChainHeadEvent, chainHeadChanSize),
-		isActivated:          false,
+	if bc != nil && gh != nil {
+		// this is only called once
+		once.Do(func() {
+			stakingManager = &StakingManager{
+				addressBookConnector: newAddressBookConnector(bc, gh),
+				stakingInfoCache:     newStakingInfoCache(),
+				stakingInfoDB:        db,
+				governanceHelper:     gh,
+				blockchain:           bc,
+				chainHeadChan:        make(chan blockchain.ChainHeadEvent, chainHeadChanSize),
+				isActivated:          false,
+			}
+		})
 	}
+
+	return stakingManager
+}
+
+func GetStakingManager() *StakingManager {
+	return stakingManager
 }
 
 // GetStakingInfo returns a corresponding stakingInfo for a blockNum.
@@ -93,7 +115,7 @@ func (sm *StakingManager) GetStakingInfo(blockNum uint64) *StakingInfo {
 	}
 
 	// Calculate staking info from block header and updates it to cache and db
-	calcStakingInfo, err := sm.updateStakingInfo(stakingBlockNumber)
+	calcStakingInfo, err := sm.UpdateStakingInfo(stakingBlockNumber)
 	if calcStakingInfo == nil && err != nil {
 		logger.Error("Failed to get stakingInfo", "blockNum", blockNum, "staking block number", stakingBlockNumber, "err", err, "stakingInfo", calcStakingInfo)
 		return nil
@@ -107,8 +129,8 @@ func (sm *StakingManager) IsActivated() bool {
 	return sm.isActivated
 }
 
-// updateStakingInfo updates staking info in cache and db created from given block number.
-func (sm *StakingManager) updateStakingInfo(blockNum uint64) (*StakingInfo, error) {
+// UpdateStakingInfo updates staking info in cache and db created from given block number.
+func (sm *StakingManager) UpdateStakingInfo(blockNum uint64) (*StakingInfo, error) {
 	stakingInfo, err := sm.addressBookConnector.getStakingInfoFromAddressBook(blockNum)
 	if err != nil {
 		return nil, err
@@ -152,7 +174,7 @@ func (sm *StakingManager) handleChainHeadEvent() {
 			if sm.governanceHelper.ProposerPolicy() == params.WeightedRandom {
 				stakingBlockNum := ev.Block.NumberU64() - ev.Block.NumberU64()%sm.governanceHelper.StakingUpdateInterval()
 				if cachedStakingInfo := sm.stakingInfoCache.get(stakingBlockNum); cachedStakingInfo == nil {
-					stakingInfo, err := sm.updateStakingInfo(stakingBlockNum)
+					stakingInfo, err := sm.UpdateStakingInfo(stakingBlockNum)
 					if stakingInfo == nil && err != nil {
 						logger.Error("Failed to update stakingInfoCache", "blockNumber", ev.Block.NumberU64(), "stakingNumber", stakingBlockNum, "err", err)
 					}
