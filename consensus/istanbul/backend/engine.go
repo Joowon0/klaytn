@@ -650,6 +650,13 @@ func (sb *backend) snapshot(chain consensus.ChainReader, number uint64, hash com
 		} else {
 			logger.Trace("Can't refreshing proposers while creating snapshot due to lack of required header", "snap.Number", snap.Number)
 		}
+
+		// staking info is written to DB every staking update interval
+		if params.IsStakingUpdateInterval(snap.Number) {
+			if err := sb.GetStakingManager().SetStakingInfoDB(snap.Number); err != nil {
+				logger.Error("Failed to write staking info to db", "blockNum", snap.Number, "err", err)
+			}
+		}
 	}
 
 	// If we've generated a new checkpoint snapshot, save to disk

@@ -112,7 +112,6 @@ func (sm *StakingManager) SetStakingInfoDB(blockNum uint64) error {
 	}
 
 	if err := sm.addStakingInfoToDB(cachedStakingInfo); err != nil {
-		logger.Error("Failed to write staking info to db.", "err", err, "stakingInfo", cachedStakingInfo)
 		return err
 	}
 
