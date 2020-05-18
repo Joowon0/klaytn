@@ -547,7 +547,8 @@ func (valSet *weightedCouncil) F() int {
 
 func (valSet *weightedCouncil) Policy() istanbul.ProposerPolicy { return valSet.policy }
 
-// Refresh recalculates up-to-date proposers only when blockNum is the proposer update interval.
+// Refresh recalculates up-to-date proposers.
+// It should be called every proposer update interval.
 // It returns an error if it can't make up-to-date proposers
 //   (1) due toe wrong parameters
 //   (2) due to lack of staking information
@@ -578,22 +579,28 @@ func (valSet *weightedCouncil) Refresh(hash common.Hash, blockNum uint64, stakin
 		return err
 	}
 
-	newStakingInfo := stakingManager.GetStakingInfo(blockNum + 1)
-
-	valSet.stakingInfo = newStakingInfo
-	if valSet.stakingInfo == nil {
+	// Get stored staking info
+	// Staking info might not be stored if it is a multiple of staking update interval
+	stakingInfo := stakingManager.GetStakingInfo(blockNum)
+	if stakingInfo == nil {
 		// Just return without updating proposer
 		return errors.New("skip refreshing proposers due to no staking info")
 	}
 
-	weightedValidators, stakingAmounts, err := valSet.getStakingAmountsOfValidators(newStakingInfo)
+	// calculate staking amount
+	weightedValidators, stakingAmounts, err := valSet.getStakingAmountsOfValidators(stakingInfo)
 	if err != nil {
 		return err
 	}
-	totalStaking := calcTotalAmount(weightedValidators, newStakingInfo, stakingAmounts)
+	totalStaking := calcTotalAmount(weightedValidators, stakingInfo, stakingAmounts)
 	calcWeight(weightedValidators, stakingAmounts, totalStaking)
 
+	// calculate and set new proposers for next block
 	valSet.refreshProposers(seed, blockNum)
+
+	// store a new staking info
+	valSet.stakingInfo = stakingInfo
+	stakingManager.SetStakingInfoCache(stakingInfo)
 
 	logger.Info("Refresh done.", "blockNum", blockNum, "hash", hash, "valSet.blockNum", valSet.blockNum, "stakingInfo.BlockNum", valSet.stakingInfo.BlockNum)
 	logger.Debug("New proposers calculated", "new proposers", valSet.proposers)
