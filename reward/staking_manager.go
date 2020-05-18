@@ -18,6 +18,7 @@ package reward
 
 import (
 	"errors"
+	"github.com/hashicorp/go-multierror"
 	"github.com/klaytn/klaytn/blockchain"
 	"github.com/klaytn/klaytn/blockchain/state"
 	"github.com/klaytn/klaytn/blockchain/types"
@@ -95,15 +96,15 @@ func (sm *StakingManager) GetStakingInfo(blockNum uint64) *StakingInfo {
 	return nil
 }
 
-// SetStakingInfoCache stores staking info in cache.
+// SetStakingInfoToCache stores staking info in cache.
 // Staking info cache stores at most maxStakingCache.
-func (sm *StakingManager) SetStakingInfoCache(stakingInfo *StakingInfo) {
+func (sm *StakingManager) SetStakingInfoToCache(stakingInfo *StakingInfo) {
 	sm.isActivated = true
 	sm.stakingInfoCache.add(stakingInfo)
 }
 
-// SetStakingInfoDB gets staking info from cache and stores it in db.
-func (sm *StakingManager) SetStakingInfoDB(blockNum uint64) error {
+// SetStakingInfoToDB gets staking info from cache and stores it in db.
+func (sm *StakingManager) SetStakingInfoToDB(blockNum uint64) error {
 	stakingBlockNumber := params.CalcStakingBlockNumber(blockNum)
 
 	cachedStakingInfo := sm.stakingInfoCache.get(stakingBlockNumber)
@@ -116,6 +117,29 @@ func (sm *StakingManager) SetStakingInfoDB(blockNum uint64) error {
 	}
 
 	return nil
+}
+
+// SetStakingInfoToDB stores all cache staking info to DB.
+func (sm *StakingManager) SetAllStakingInfoToDB() error {
+	var errs error
+	for _, s := range sm.stakingInfoCache.cells {
+		err := sm.addStakingInfoToDB(s)
+		if err != nil {
+			errs = multierror.Append(errs, err)
+		}
+	}
+
+	return errs
+}
+
+// Stop should be called before node stops.
+func (sm *StakingManager) Stop() {
+	err := sm.SetAllStakingInfoToDB()
+	if err != nil {
+		logger.Error("failed to store staking info to db", "err", err)
+	}
+
+	sm.Unsubscribe()
 }
 
 // UpdateStakingInfo fetch staking info from address book and stores it in cache.

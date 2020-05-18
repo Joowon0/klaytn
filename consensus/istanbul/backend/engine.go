@@ -653,7 +653,7 @@ func (sb *backend) snapshot(chain consensus.ChainReader, number uint64, hash com
 
 		// staking info is written to DB every staking update interval
 		if params.IsStakingUpdateInterval(snap.Number) {
-			if err := sb.GetStakingManager().SetStakingInfoDB(snap.Number); err != nil {
+			if err := sb.GetStakingManager().SetStakingInfoToDB(snap.Number); err != nil {
 				logger.Error("Failed to write staking info to db", "blockNum", snap.Number, "err", err)
 			}
 		}

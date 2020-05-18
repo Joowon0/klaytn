@@ -608,7 +608,7 @@ func (s *CN) Start(srvr p2p.Server) error {
 // Klaytn protocol.
 func (s *CN) Stop() error {
 	if s.stakingManager != nil {
-		s.stakingManager.Unsubscribe()
+		s.stakingManager.Stop()
 	}
 	s.bloomIndexer.Close()
 	s.blockchain.Stop()

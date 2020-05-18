@@ -600,7 +600,7 @@ func (valSet *weightedCouncil) Refresh(hash common.Hash, blockNum uint64, stakin
 
 	// store a new staking info
 	valSet.stakingInfo = stakingInfo
-	stakingManager.SetStakingInfoCache(stakingInfo)
+	stakingManager.SetStakingInfoToCache(stakingInfo)
 
 	logger.Info("Refresh done.", "blockNum", blockNum, "hash", hash, "valSet.blockNum", valSet.blockNum, "stakingInfo.BlockNum", valSet.stakingInfo.BlockNum)
 	logger.Debug("New proposers calculated", "new proposers", valSet.proposers)

@@ -52,7 +52,6 @@ func (sc *stakingInfoCache) get(blockNum uint64) *StakingInfo {
 		return nil
 	}
 	return stakingInfo
-
 }
 
 func (sc *stakingInfoCache) add(stakingInfo *StakingInfo) {
@@ -70,6 +69,12 @@ func (sc *stakingInfoCache) add(stakingInfo *StakingInfo) {
 			sc.minBlockNum = s.BlockNum
 		}
 	}
-	sc.cells[stakingInfo.BlockNum] = stakingInfo
+
+	newStakingInfo := newEmptyStakingInfo(stakingInfo.BlockNum)
+	err := copier.Copy(newStakingInfo, stakingInfo)
+	if err != nil {
+		return
+	}
+	sc.cells[newStakingInfo.BlockNum] = newStakingInfo
 	logger.Debug("Add a new stakingInfo to stakingInfoCache", "blockNum", stakingInfo.BlockNum)
 }
