@@ -75,20 +75,12 @@ func (sm *StakingManager) GetStakingInfo(blockNum uint64) *StakingInfo {
 	// Get staking info from DB
 	if storedStakingInfo, err := sm.getStakingInfoFromDB(stakingBlockNumber); storedStakingInfo != nil && err == nil {
 		logger.Debug("StakingInfoDB hit.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", storedStakingInfo)
+		sm.stakingInfoCache.add(storedStakingInfo)
 		return storedStakingInfo
-	} else {
-		logger.Warn("Failed to get stakingInfo from DB", "err", err, "blockNum", blockNum)
 	}
 
-	// Calculate staking info from block header and updates it to cache and db
-	calcStakingInfo, _ := sm.updateStakingInfo(stakingBlockNumber)
-	if calcStakingInfo == nil {
-		logger.Error("Failed to update stakingInfo", "blockNum", blockNum, "staking block number", stakingBlockNumber)
-		return nil
-	}
-
-	logger.Debug("Get stakingInfo from header.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", calcStakingInfo)
-	return calcStakingInfo
+	logger.Error("Failed to get stakingInfo from cache and DB", "err", err, "blockNum", blockNum)
+	return nil
 }
 
 func (sm *StakingManager) IsActivated() bool {
@@ -97,7 +89,8 @@ func (sm *StakingManager) IsActivated() bool {
 
 // updateStakingInfo updates staking info in cache and db created from given block number.
 func (sm *StakingManager) updateStakingInfo(blockNum uint64) (*StakingInfo, error) {
-	stakingInfo, err := sm.addressBookConnector.getStakingInfoFromAddressBook(blockNum)
+	stakingBlockNumber := params.CalcStakingBlockNumber(blockNum)
+	stakingInfo, err := sm.addressBookConnector.getStakingInfoFromAddressBook(stakingBlockNumber)
 	if err != nil {
 		return nil, err
 	}

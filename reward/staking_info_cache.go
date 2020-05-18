@@ -16,7 +16,10 @@
 
 package reward
 
-import "sync"
+import (
+	"github.com/jinzhu/copier"
+	"sync"
+)
 
 const (
 	maxStakingCache = 4
@@ -38,10 +41,18 @@ func (sc *stakingInfoCache) get(blockNum uint64) *StakingInfo {
 	sc.lock.RLock()
 	defer sc.lock.RUnlock()
 
-	if s, ok := sc.cells[blockNum]; ok {
-		return s
+	s, ok := sc.cells[blockNum]
+	if !ok {
+		return nil
 	}
-	return nil
+
+	stakingInfo := newEmptyStakingInfo(blockNum)
+	err := copier.Copy(stakingInfo, s)
+	if err != nil {
+		return nil
+	}
+	return stakingInfo
+
 }
 
 func (sc *stakingInfoCache) add(stakingInfo *StakingInfo) {
@@ -49,10 +60,6 @@ func (sc *stakingInfoCache) add(stakingInfo *StakingInfo) {
 	defer sc.lock.Unlock()
 
 	// Assumption: stakingInfo is not nil.
-
-	if _, ok := sc.cells[stakingInfo.BlockNum]; ok {
-		return
-	}
 
 	if len(sc.cells) >= maxStakingCache {
 		delete(sc.cells, sc.minBlockNum)

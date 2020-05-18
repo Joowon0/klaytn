@@ -23,6 +23,7 @@ require (
 	github.com/huin/goupnp v1.0.0
 	github.com/influxdata/influxdb v1.5.2
 	github.com/jackpal/go-nat-pmp v1.0.1
+	github.com/jinzhu/copier v0.0.0-20190924061706-b57f9002281a
 	github.com/julienschmidt/httprouter v1.2.0
 	github.com/klauspost/compress v1.4.1 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
