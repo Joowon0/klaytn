@@ -531,6 +531,8 @@ func (mb *MainBridge) Stop() error {
 
 	mb.bridgeServer.Stop()
 
+	logger.Info("terminated all bridge")
+
 	return nil
 }
 

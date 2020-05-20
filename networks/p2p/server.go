@@ -805,6 +805,8 @@ func (srv *MultiChannelServer) Stop() {
 	}
 	close(srv.quit)
 	srv.loopWG.Wait()
+
+	logger.Info("terminated all channel")
 }
 
 // GetListenAddress returns the listen addresses of the server.
@@ -1149,6 +1151,8 @@ func (srv *BaseServer) Stop() {
 	}
 	close(srv.quit)
 	srv.loopWG.Wait()
+
+	logger.Info("terminated all server channel")
 }
 
 // GetListenAddress returns the listen address of the server.

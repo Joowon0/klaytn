@@ -623,5 +623,7 @@ func (s *CN) Stop() error {
 	s.chainDB.Close()
 	close(s.shutdownChan)
 
+	logger.Info("terminated all service")
+
 	return nil
 }

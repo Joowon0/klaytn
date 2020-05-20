@@ -608,6 +608,8 @@ func (n *Node) Stop() error {
 	if keystoreErr != nil {
 		return keystoreErr
 	}
+
+	logger.Info("terminated the node with other services")
 	return nil
 }
 
