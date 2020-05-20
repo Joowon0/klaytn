@@ -117,6 +117,8 @@ func (sm *StakingManager) GetStakingInfo(blockNum uint64) *StakingInfo {
 
 // updateStakingInfo updates staking info in cache and db created from given block number.
 func (sm *StakingManager) updateStakingInfo(blockNum uint64) (*StakingInfo, error) {
+	logger.Error("updateStakingInfo is called", "blockNum", blockNum)
+
 	stakingInfo, err := sm.addressBookConnector.getStakingInfoFromAddressBook(blockNum)
 	if err != nil {
 		return nil, err
