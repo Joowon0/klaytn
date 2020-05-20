@@ -322,7 +322,7 @@ func RegisterMigrationPrerequisites(f func(uint64) error) {
 
 func (bc *BlockChain) migrateState(rootHash common.Hash) error {
 	for _, f := range migrationPrerequisites {
-		err := f(*bc.GetBlockNumber(rootHash))
+		err := f(bc.CurrentBlock().NumberU64())
 		if err != nil {
 			return err
 		}
@@ -982,6 +982,7 @@ func (bc *BlockChain) GetBlockByHash(hash common.Hash) *types.Block {
 
 // GetBlockNumber retrieves a blockNumber from the database by hash, caching it if found.
 func (bc *BlockChain) GetBlockNumber(hash common.Hash) *uint64 {
+	logger.Error("(bc *BlockChain) GetBlockNumber", "hash", hash)
 	return bc.hc.GetBlockNumber(hash)
 }
 

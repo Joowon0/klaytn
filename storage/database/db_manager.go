@@ -857,6 +857,7 @@ func (dbm *databaseManager) DeleteHeader(hash common.Hash, number uint64) {
 // Head Number operations.
 // ReadHeaderNumber returns the header number assigned to a hash.
 func (dbm *databaseManager) ReadHeaderNumber(hash common.Hash) *uint64 {
+	logger.Error("(bc *databaseManager) GetBlockNumber", "hash", hash)
 	if cachedHeaderNumber := dbm.cm.readBlockNumberCache(hash); cachedHeaderNumber != nil {
 		return cachedHeaderNumber
 	}
@@ -864,6 +865,7 @@ func (dbm *databaseManager) ReadHeaderNumber(hash common.Hash) *uint64 {
 	db := dbm.getDatabase(headerDB)
 	data, _ := db.Get(headerNumberKey(hash))
 	if len(data) != 8 {
+		logger.Error("no data", "data", string(data), "len(data)", len(data))
 		return nil
 	}
 	number := binary.BigEndian.Uint64(data)
