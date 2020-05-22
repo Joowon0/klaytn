@@ -145,9 +145,8 @@ func updateStakingInfo(blockNum uint64) (*StakingInfo, error) {
 		return nil, ErrStakingManagerNotSet
 	}
 
-	logger.Error("[Winnie] updateStakingInfo", "blockNum", blockNum, "stakingNum")
-
 	stakingInfo, err := stakingManager.addressBookConnector.getStakingInfoFromAddressBook(blockNum)
+	logger.Error("[Winnie] updateStakingInfo", "blockNum", blockNum, "stakingInfo", stakingInfo)
 	if err != nil {
 		return nil, err
 	}
