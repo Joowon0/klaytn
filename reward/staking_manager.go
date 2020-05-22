@@ -111,6 +111,7 @@ func GetStakingManager() *StakingManager {
 
 // GetStakingInfo returns a corresponding stakingInfo for a blockNum.
 func GetStakingInfo(blockNum uint64) *StakingInfo {
+	logger.Error("GetStakingInfo called", "blockNum", blockNum)
 	if stakingManager == nil {
 		logger.Error("unable to GetStakingInfo", "err", ErrStakingManagerNotSet)
 		return nil
@@ -150,6 +151,7 @@ func GetStakingInfo(blockNum uint64) *StakingInfo {
 
 // updateStakingInfo updates staking info in cache and db created from given block number.
 func updateStakingInfo(blockNum uint64) (*StakingInfo, error) {
+	logger.Error("updateStakingInfo called", "blockNum", blockNum)
 	if stakingManager == nil {
 		return nil, ErrStakingManagerNotSet
 	}
@@ -173,6 +175,7 @@ func updateStakingInfo(blockNum uint64) (*StakingInfo, error) {
 
 // CheckStakingInfoStored makes sure the given staking info is stored in cache and DB
 func CheckStakingInfoStored(blockNum uint64) error {
+	logger.Error("CheckStakingInfoStored called", "blockNum", blockNum)
 	if stakingManager == nil {
 		logger.Error("unable to GetStakingInfo", "err", ErrStakingManagerNotSet)
 		return nil
@@ -186,6 +189,7 @@ func CheckStakingInfoStored(blockNum uint64) error {
 
 // StakingManagerSubscribe setups a channel to listen chain head event and starts a goroutine to update staking cache.
 func StakingManagerSubscribe() {
+	logger.Error("StakingManagerSubscribe called")
 	if stakingManager == nil {
 		logger.Warn("unable to subscribe; this can slow down node", "err", ErrStakingManagerNotSet)
 		return
@@ -216,6 +220,7 @@ func handleChainHeadEvent() {
 		case ev := <-stakingManager.chainHeadChan:
 			if stakingManager.governanceHelper.ProposerPolicy() == params.WeightedRandom {
 				// check and update if staking info is not valid before for the next update interval blocks
+				logger.Error("GetStakingInfo called on chain head event")
 				stakingInfo := GetStakingInfo(ev.Block.NumberU64() + params.StakingUpdateInterval())
 				if stakingInfo == nil {
 					logger.Error("unable to fetch staking info", "blockNum", ev.Block.NumberU64())
