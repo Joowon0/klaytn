@@ -111,13 +111,13 @@ func GetStakingManager() *StakingManager {
 
 // GetStakingInfo returns a corresponding stakingInfo for a blockNum.
 func GetStakingInfo(blockNum uint64) *StakingInfo {
-	logger.Error("GetStakingInfo called", "blockNum", blockNum)
 	if stakingManager == nil {
 		logger.Error("unable to GetStakingInfo", "err", ErrStakingManagerNotSet)
 		return nil
 	}
 
 	stakingBlockNumber := params.CalcStakingBlockNumber(blockNum)
+	logger.Error("GetStakingInfo called", "blockNum", blockNum, "staking blockNum", stakingBlockNumber)
 
 	// Get staking info from cache
 	if cachedStakingInfo := stakingManager.stakingInfoCache.get(stakingBlockNumber); cachedStakingInfo != nil {
@@ -151,10 +151,11 @@ func GetStakingInfo(blockNum uint64) *StakingInfo {
 
 // updateStakingInfo updates staking info in cache and db created from given block number.
 func updateStakingInfo(blockNum uint64) (*StakingInfo, error) {
-	logger.Error("updateStakingInfo called", "blockNum", blockNum)
 	if stakingManager == nil {
 		return nil, ErrStakingManagerNotSet
 	}
+
+	logger.Error("updateStakingInfo called", "blockNum", blockNum)
 
 	stakingInfo, err := stakingManager.addressBookConnector.getStakingInfoFromAddressBook(blockNum)
 	if err != nil {
@@ -175,7 +176,6 @@ func updateStakingInfo(blockNum uint64) (*StakingInfo, error) {
 
 // CheckStakingInfoStored makes sure the given staking info is stored in cache and DB
 func CheckStakingInfoStored(blockNum uint64) error {
-	logger.Error("CheckStakingInfoStored called", "blockNum", blockNum)
 	if stakingManager == nil {
 		logger.Error("unable to GetStakingInfo", "err", ErrStakingManagerNotSet)
 		return nil
@@ -183,6 +183,8 @@ func CheckStakingInfoStored(blockNum uint64) error {
 
 	stakingBlockNumber := params.CalcStakingBlockNumber(blockNum)
 	_, err := updateStakingInfo(stakingBlockNumber)
+
+	logger.Error("CheckStakingInfoStored called", "blockNum", blockNum, "staking blockNum", stakingBlockNumber)
 
 	return err
 }
