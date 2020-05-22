@@ -111,6 +111,8 @@ func GetStakingInfo(blockNum uint64) *StakingInfo {
 
 	stakingBlockNumber := params.CalcStakingBlockNumber(blockNum)
 
+	logger.Error("[Winnie] GetStakingInfo", "blockNum", blockNum, "stakingNum", stakingBlockNumber)
+
 	// Get staking info from cache
 	if cachedStakingInfo := stakingManager.stakingInfoCache.get(stakingBlockNumber); cachedStakingInfo != nil {
 		logger.Debug("StakingInfoCache hit.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", cachedStakingInfo)
@@ -143,6 +145,8 @@ func updateStakingInfo(blockNum uint64) (*StakingInfo, error) {
 		return nil, ErrStakingManagerNotSet
 	}
 
+	logger.Error("[Winnie] updateStakingInfo", "blockNum", blockNum, "stakingNum")
+
 	stakingInfo, err := stakingManager.addressBookConnector.getStakingInfoFromAddressBook(blockNum)
 	if err != nil {
 		return nil, err
@@ -167,6 +171,7 @@ func CheckStakingInfoStored(blockNum uint64) error {
 	}
 
 	stakingBlockNumber := params.CalcStakingBlockNumber(blockNum)
+	logger.Error("[Winnie] CheckStakingInfoStored", "blockNum", blockNum, "stakingNum", stakingBlockNumber)
 	_, err := updateStakingInfo(stakingBlockNumber)
 
 	return err
