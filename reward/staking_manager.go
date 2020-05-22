@@ -85,6 +85,11 @@ func NewStakingManager(bc blockChain, gh governanceHelper, db stakingInfoDB) *St
 			// If there is no staking info in either cache, db or state trie, the node cannot make a block.
 			// The information in state trie is deleted after state trie migration.
 			blockchain.RegisterMigrationPrerequisites(func(blockNum uint64) error {
+				if params.IsStakingUpdateInterval(blockNum) {
+					if err := CheckStakingInfoStored(blockNum); err != nil {
+						return err
+					}
+				}
 				if err := CheckStakingInfoStored(blockNum); err != nil {
 					return err
 				}
@@ -115,17 +120,17 @@ func GetStakingInfo(blockNum uint64) *StakingInfo {
 
 	// Get staking info from cache
 	if cachedStakingInfo := stakingManager.stakingInfoCache.get(stakingBlockNumber); cachedStakingInfo != nil {
-		logger.Debug("StakingInfoCache hit.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", cachedStakingInfo)
+		logger.Error("StakingInfoCache hit.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", cachedStakingInfo)
 		return cachedStakingInfo
 	}
 
 	// Get staking info from DB
 	if storedStakingInfo, err := getStakingInfoFromDB(stakingBlockNumber); storedStakingInfo != nil && err == nil {
-		logger.Debug("StakingInfoDB hit.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", storedStakingInfo)
+		logger.Error("StakingInfoDB hit.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", storedStakingInfo)
 		stakingManager.stakingInfoCache.add(storedStakingInfo)
 		return storedStakingInfo
 	} else {
-		logger.Debug("failed to get stakingInfo from DB", "err", err, "blockNum", blockNum)
+		logger.Error("failed to get stakingInfo from DB", "err", err, "blockNum", blockNum)
 	}
 
 	// Calculate staking info from block header and updates it to cache and db
@@ -135,7 +140,7 @@ func GetStakingInfo(blockNum uint64) *StakingInfo {
 		return nil
 	}
 
-	logger.Debug("Get stakingInfo from header.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", calcStakingInfo)
+	logger.Error("Get stakingInfo from header.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", calcStakingInfo)
 	return calcStakingInfo
 }
 
