@@ -433,7 +433,7 @@ func (bc *BlockChain) migrateState(rootHash common.Hash) error {
 		return errors.New("copied state is not same with origin")
 	}
 
-	bc.db.FinishStateMigration()
+	//bc.db.FinishStateMigration()
 	logger.Info("completed state migration")
 
 	return nil
