@@ -129,7 +129,7 @@ func (rd *RewardDistributor) distributeBlockReward(b BalanceAdder, header *types
 	}
 	b.AddBalance(kirAddr, kirIncentive)
 
-	logger.Debug("Block reward", "blockNumber", header.Number.Uint64(),
+	logger.Error("[Winnie] Block reward", "blockNumber", header.Number.Uint64(),
 		"Reward address of a proposer", proposer, "CN reward amount", cnReward,
 		"PoC address", pocAddr, "Poc incentive", pocIncentive,
 		"KIR address", kirAddr, "KIR incentive", kirIncentive)

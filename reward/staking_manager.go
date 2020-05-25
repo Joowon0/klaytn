@@ -110,7 +110,7 @@ func GetStakingManager() *StakingManager {
 // GetStakingInfo returns a corresponding stakingInfo for a blockNum.
 func GetStakingInfo(blockNum uint64) *StakingInfo {
 	if stakingManager == nil {
-		logger.Error("unable to GetStakingInfo", "err", ErrStakingManagerNotSet)
+		logger.Error("[Winnie] unable to GetStakingInfo", "err", ErrStakingManagerNotSet)
 		return nil
 	}
 
@@ -120,13 +120,13 @@ func GetStakingInfo(blockNum uint64) *StakingInfo {
 
 	// Get staking info from cache
 	if cachedStakingInfo := stakingManager.stakingInfoCache.get(stakingBlockNumber); cachedStakingInfo != nil {
-		logger.Error("StakingInfoCache hit.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", cachedStakingInfo)
+		logger.Error("[Winnie] StakingInfoCache hit.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", cachedStakingInfo)
 		return cachedStakingInfo
 	}
 
 	// Get staking info from DB
 	if storedStakingInfo, err := getStakingInfoFromDB(stakingBlockNumber); storedStakingInfo != nil && err == nil {
-		logger.Error("StakingInfoDB hit.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", storedStakingInfo)
+		logger.Error("[Winnie] StakingInfoDB hit.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", storedStakingInfo)
 		stakingManager.stakingInfoCache.add(storedStakingInfo)
 		return storedStakingInfo
 	} else {
@@ -136,11 +136,11 @@ func GetStakingInfo(blockNum uint64) *StakingInfo {
 	// Calculate staking info from block header and updates it to cache and db
 	calcStakingInfo, err := updateStakingInfo(stakingBlockNumber)
 	if calcStakingInfo == nil {
-		logger.Error("failed to update stakingInfo", "blockNum", blockNum, "staking block number", stakingBlockNumber, "err", err)
+		logger.Error("[Winnie] failed to update stakingInfo", "blockNum", blockNum, "staking block number", stakingBlockNumber, "err", err)
 		return nil
 	}
 
-	logger.Error("Get stakingInfo from header.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", calcStakingInfo)
+	logger.Error("[Winnie] Get stakingInfo from header.", "blockNum", blockNum, "staking block number", stakingBlockNumber, "stakingInfo", calcStakingInfo)
 	return calcStakingInfo
 }
 
@@ -159,12 +159,12 @@ func updateStakingInfo(blockNum uint64) (*StakingInfo, error) {
 	stakingManager.stakingInfoCache.add(stakingInfo)
 
 	if err := addStakingInfoToDB(stakingInfo); err != nil {
-		logger.Debug("failed to write staking info to db", "err", err, "stakingInfo", stakingInfo)
+		logger.Debug("[Winnie] failed to write staking info to db", "err", err, "stakingInfo", stakingInfo)
 		return stakingInfo, err
 	}
 
-	logger.Info("Add a new stakingInfo to stakingInfoCache and stakingInfoDB", "blockNum", blockNum)
-	logger.Debug("Added stakingInfo", "stakingInfo", stakingInfo)
+	logger.Info("[Winnie] Add a new stakingInfo to stakingInfoCache and stakingInfoDB", "blockNum", blockNum)
+	logger.Debug("[Winnie] Added stakingInfo", "stakingInfo", stakingInfo)
 	return stakingInfo, nil
 }
 
@@ -184,7 +184,7 @@ func CheckStakingInfoStored(blockNum uint64) error {
 // StakingManagerSubscribe setups a channel to listen chain head event and starts a goroutine to update staking cache.
 func StakingManagerSubscribe() {
 	if stakingManager == nil {
-		logger.Warn("unable to subscribe; this can slow down node", "err", ErrStakingManagerNotSet)
+		logger.Warn("[Winnie] unable to subscribe; this can slow down node", "err", ErrStakingManagerNotSet)
 		return
 	}
 
