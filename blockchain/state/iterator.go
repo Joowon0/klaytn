@@ -38,10 +38,11 @@ type NodeIterator struct {
 
 	accountHash common.Hash // Hash of the node containing the account
 	codeHash    common.Hash // Hash of the contract source code
-	code        []byte      // Source code associated with a contract
+	Code        []byte      // Source code associated with a contract
 
 	Hash   common.Hash // Hash of the current entry being iterated (nil if not standalone)
 	Parent common.Hash // Hash of the first full ancestor node (nil if current is the root)
+	Path   []byte      // the hex-encoded path to the current node.
 
 	Error error // Failure set in case of an internal error in the iteratord
 }
@@ -90,8 +91,8 @@ func (it *NodeIterator) step() error {
 		return nil
 	}
 	// If we had source code previously, discard that
-	if it.code != nil {
-		it.code = nil
+	if it.Code != nil {
+		it.Code = nil
 		return nil
 	}
 	// Step to the next state trie node, terminating if we're out of nodes
@@ -126,7 +127,7 @@ func (it *NodeIterator) step() error {
 
 		it.codeHash = common.BytesToHash(pa.GetCodeHash())
 		//addrHash := common.BytesToHash(it.stateIt.LeafKey())
-		it.code, err = it.state.db.ContractCode(common.BytesToHash(pa.GetCodeHash()))
+		it.Code, err = it.state.db.ContractCode(common.BytesToHash(pa.GetCodeHash()))
 		if err != nil {
 			return fmt.Errorf("code %x: %v", pa.GetCodeHash(), err)
 		}
@@ -148,14 +149,14 @@ func (it *NodeIterator) retrieve() bool {
 	// Otherwise retrieve the current entry
 	switch {
 	case it.dataIt != nil:
-		it.Hash, it.Parent = it.dataIt.Hash(), it.dataIt.Parent()
+		it.Hash, it.Parent, it.Path = it.dataIt.Hash(), it.dataIt.Parent(), it.dataIt.Path()
 		if it.Parent == (common.Hash{}) {
 			it.Parent = it.accountHash
 		}
-	case it.code != nil:
+	case it.Code != nil:
 		it.Hash, it.Parent = it.codeHash, it.accountHash
 	case it.stateIt != nil:
-		it.Hash, it.Parent = it.stateIt.Hash(), it.stateIt.Parent()
+		it.Hash, it.Parent, it.Path = it.stateIt.Hash(), it.stateIt.Parent(), it.stateIt.Path()
 	}
 	return true
 }
