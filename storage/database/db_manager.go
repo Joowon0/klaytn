@@ -476,7 +476,7 @@ func (dbm *databaseManager) NewBatch(dbEntryType DBEntryType) Batch {
 		defer dbm.lockInMigration.RUnlock()
 
 		if dbm.inMigration {
-			return dbm.GetStateTrieMigrationDB().NewBatch()
+			dbm.GetStateTrieMigrationDB().NewBatch()
 		}
 	}
 	return dbm.getDatabase(dbEntryType).NewBatch()
