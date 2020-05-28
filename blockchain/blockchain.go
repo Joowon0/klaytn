@@ -1081,7 +1081,7 @@ func (bc *BlockChain) writeStateTrie(block *types.Block, state *state.StateDB) e
 		}
 
 		if isCommitTrieRequired(bc, block.NumberU64()) {
-			logger.Trace("Commit the state trie into the disk", "blocknum", block.NumberU64())
+			logger.Info("Commit the state trie into the disk", "blocknum", block.NumberU64())
 			if err := trieDB.Commit(block.Header().Root, true, block.NumberU64()); err != nil {
 				return err
 			}
@@ -1134,7 +1134,7 @@ func (bc *BlockChain) gcCachedNodeLoop() {
 					trieDB.Dereference(root.(common.Hash))
 					cnt++
 				}
-				logger.Debug("GC cached node", "currentBlk", blkNum, "chosenBlk", chosen, "deferenceCnt", cnt)
+				logger.Info("GC cached node", "currentBlk", blkNum, "chosenBlk", chosen, "deferenceCnt", cnt)
 			case <-bc.quit:
 				return
 			}
