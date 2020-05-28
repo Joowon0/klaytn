@@ -666,7 +666,7 @@ func (db *Database) dereference(child common.Hash, parent common.Hash) {
 
 // Cap iteratively flushes old but still referenced trie nodes until the total
 // memory usage goes below the given threshold.
-func (db *Database) Cap(limit common.StorageSize) error {
+func (db *Database) Cap(limit common.StorageSize, blockNum uint64) error {
 	// Create a database batch to flush persistent data out. It is important that
 	// outside code doesn't see an inconsistent state (referenced data removed from
 	// memory cache during commit but not yet in persistent database). This is ensured
@@ -674,6 +674,10 @@ func (db *Database) Cap(limit common.StorageSize) error {
 	db.lock.RLock()
 
 	nodes, nodeSize, start := len(db.nodes), db.nodesSize, time.Now()
+
+	for n := range db.nodes {
+		logger.Info("Has node before Cap", "blockNum", blockNum, "node", n)
+	}
 
 	// db.nodesSize only contains the useful data in the cache, but when reporting
 	// the total memory consumption, the maintenance metadata is also needed to be
@@ -697,6 +701,7 @@ func (db *Database) Cap(limit common.StorageSize) error {
 		// Fetch the oldest referenced node and push into the batch
 		node := db.nodes[oldest]
 		enc := node.rlp()
+		logger.Info("Cap node", "blockNum", blockNum, "node", oldest)
 		if err := database.PutAndWriteBatchesOverThreshold(batch, oldest[:], enc); err != nil {
 			db.lock.RUnlock()
 			return err
