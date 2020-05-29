@@ -244,6 +244,19 @@ func NewBlockChain(db database.DBManager, cacheConfig *CacheConfig, chainConfig 
 			}
 		}
 	}
+
+	// Before migration, migration block  number trie in cache should be stored in DB.
+	//
+	// A State migration is a process of moving a trie from old DB to new DB.
+	// Without commit, a migration cannot go on.
+	RegisterMigrationPrerequisites(func(block *types.Block) error {
+		if err := bc.stateCache.TrieDB().Commit(block.Header().Root, true, block.NumberU64()); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
 	// Take ownership of this particular state
 	go bc.update()
 	go bc.gcCachedNodeLoop()
@@ -1056,13 +1069,13 @@ func (bc *BlockChain) writeStateTrie(block *types.Block, state *state.StateDB) e
 	trieDB := bc.stateCache.TrieDB()
 	trieDB.UpdateMetricNodes()
 
+	bc.checkStartStateMigration(block, root)
+
 	// If we're running an archive node, always flush
 	if bc.isArchiveMode() {
 		if err := trieDB.Commit(root, false, block.NumberU64()); err != nil {
 			return err
 		}
-
-		bc.checkStartStateMigration(block.NumberU64(), root)
 	} else {
 		// Full but not archive node, do proper garbage collection
 		trieDB.Reference(root, common.Hash{}) // metadata reference to keep trie alive
@@ -1085,8 +1098,6 @@ func (bc *BlockChain) writeStateTrie(block *types.Block, state *state.StateDB) e
 			if err := trieDB.Commit(block.Header().Root, true, block.NumberU64()); err != nil {
 				return err
 			}
-
-			bc.checkStartStateMigration(block.NumberU64(), root)
 		}
 
 		bc.chBlock <- gcBlock{root, block.NumberU64()}
