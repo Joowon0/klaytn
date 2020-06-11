@@ -531,6 +531,10 @@ func (bc *BlockChain) TryGetCachedStateDB(rootHash common.Hash) (*state.StateDB,
 	return bc.StateAtWithCache(rootHash)
 }
 
+func (bc *BlockChain) TryGetRecentCachedStateDB() (*state.StateDB, error) {
+	return bc.TryGetCachedStateDB(bc.lastUpdatedRootHash)
+}
+
 // Reset purges the entire blockchain, restoring it to its genesis state.
 func (bc *BlockChain) Reset() error {
 	return bc.ResetWithGenesisBlock(bc.genesisBlock)
