@@ -21,7 +21,6 @@ import (
 	"github.com/klaytn/klaytn/blockchain"
 	"github.com/klaytn/klaytn/blockchain/types"
 	"github.com/klaytn/klaytn/common"
-	"github.com/klaytn/klaytn/consensus/istanbul"
 	"github.com/klaytn/klaytn/crypto"
 	"github.com/klaytn/klaytn/networks/p2p"
 	"github.com/klaytn/klaytn/node"
@@ -43,7 +42,7 @@ func TestSimpleBlockchain(t *testing.T) {
 	//}
 
 	numAccounts := 12
-	fullNode, node, validator, chainId, workspace := newBlockchain(t)
+	fullNode, node, validator, chainId, workspace := newBlockchain(t, params.RoundRobin)
 	defer os.RemoveAll(workspace)
 
 	// create account
@@ -71,7 +70,7 @@ func TestSimpleBlockchain(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// start full node with previous db
-	fullNode, node = newKlaytnNode(t, workspace, validator)
+	fullNode, node = newKlaytnNode(t, workspace, validator, params.RoundRobin)
 	if err := node.StartMining(false); err != nil {
 		t.Fatal()
 	}
@@ -83,8 +82,7 @@ func TestSimpleBlockchain(t *testing.T) {
 	}
 }
 
-func newBlockchain(t *testing.T) (*node.Node, *cn.CN, *TestAccountType, *big.Int, string) {
-	t.Log("Create a new blockchain")
+func newBlockchain(t *testing.T, proposerPolicy uint64) (*node.Node, *cn.CN, *TestAccountType, *big.Int, string) {
 	// Prepare workspace
 	workspace, err := ioutil.TempDir("", "klaytn-test-state")
 	if err != nil {
@@ -99,7 +97,7 @@ func newBlockchain(t *testing.T) (*node.Node, *cn.CN, *TestAccountType, *big.Int
 	}
 
 	// Create a Klaytn node
-	fullNode, node := newKlaytnNode(t, workspace, validator)
+	fullNode, node := newKlaytnNode(t, workspace, validator, proposerPolicy)
 	if err := node.StartMining(false); err != nil {
 		t.Fatal()
 	}
@@ -136,7 +134,7 @@ func createAccount(t *testing.T, numAccounts int, validator *TestAccountType) (*
 }
 
 // newKlaytnNode creates a klaytn node
-func newKlaytnNode(t *testing.T, dir string, validator *TestAccountType) (*node.Node, *cn.CN) {
+func newKlaytnNode(t *testing.T, dir string, validator *TestAccountType, proposerPolicy uint64) (*node.Node, *cn.CN) {
 	var klaytnNode *cn.CN
 
 	fullNode, err := node.New(&node.Config{DataDir: dir, UseLightweightKDF: true, P2P: p2p.Config{PrivateKey: validator.Keys[0]}})
@@ -157,7 +155,7 @@ func newKlaytnNode(t *testing.T, dir string, validator *TestAccountType) (*node.
 	genesis.ExtraData = genesis.ExtraData[:types.IstanbulExtraVanity]
 	genesis.ExtraData = append(genesis.ExtraData, istanbulConfData...)
 	genesis.Config.Istanbul.SubGroupSize = 1
-	genesis.Config.Istanbul.ProposerPolicy = uint64(istanbul.RoundRobin)
+	genesis.Config.Istanbul.ProposerPolicy = proposerPolicy
 	genesis.Config.Governance.Reward.MintingAmount = new(big.Int).Mul(big.NewInt(9000000000000000000), big.NewInt(params.KLAY))
 
 	cnConf := cn.GetDefaultConfig()

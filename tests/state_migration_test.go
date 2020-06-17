@@ -20,6 +20,8 @@ import (
 	"github.com/klaytn/klaytn/common"
 	"github.com/klaytn/klaytn/node"
 	"github.com/klaytn/klaytn/node/cn"
+	"github.com/klaytn/klaytn/params"
+	"github.com/klaytn/klaytn/reward"
 	"github.com/klaytn/klaytn/storage/database"
 	"github.com/stretchr/testify/assert"
 	"math/big"
@@ -31,7 +33,7 @@ import (
 
 // continues occurrence of state trie migration and node restart must success
 func TestMigration_ContinuesRestartAndMigration(t *testing.T) {
-	fullNode, node, validator, chainID, workspace, richAccount, _, _ := newSimpleBlockchain(t, 10)
+	fullNode, node, validator, chainID, workspace, richAccount, _, _ := newSimpleBlockchain(t, params.RoundRobin, 10)
 	defer os.RemoveAll(workspace)
 
 	stateTriePath := []byte("statetrie")
@@ -64,7 +66,7 @@ func TestMigration_ContinuesRestartAndMigration(t *testing.T) {
 
 // if migration status is set on miscDB and a node is restarted, migration should start
 func TestMigration_StartMigrationByMiscDB(t *testing.T) {
-	fullNode, node, validator, chainID, workspace, richAccount, _, _ := newSimpleBlockchain(t, 10)
+	fullNode, node, validator, chainID, workspace, richAccount, _, _ := newSimpleBlockchain(t, params.RoundRobin, 10)
 	defer os.RemoveAll(workspace)
 	miscDB := node.ChainDB().GetMiscDB()
 
@@ -107,13 +109,52 @@ func TestMigration_StartMigrationByMiscDB(t *testing.T) {
 	stopNode(t, fullNode)
 }
 
-func newSimpleBlockchain(t *testing.T, numAccounts int) (*node.Node, *cn.CN, *TestAccountType, *big.Int, string, *TestAccountType, []*TestAccountType, []*TestAccountType) {
+// staking information should be stored in miscDB
+func TestMigration_StakinInfoDBInMiscDB(t *testing.T) {
+	params.SetStakingUpdateInterval(5)
+	fullNode, node, validator, chainID, workspace, richAccount, _, _ := newSimpleBlockchain(t, params.WeightedRandom, 10)
+	defer os.RemoveAll(workspace)
+	miscDB := node.ChainDB().GetMiscDB()
+
+	// size up state trie to be prepared for migration
+	deployRandomTxs(t, node.TxPool(), chainID, richAccount, 100)
+	time.Sleep(time.Second)
+
+	assert.NotNil(t, reward.GetStakingInfo(node.BlockChain().CurrentHeader().Number.Uint64()))
+
+}
+
+// migration should not start if staking information is not store,
+func TestMigration_PreRequisiteStakinInfoDB(t *testing.T) {
+	fullNode, node, validator, chainID, workspace, richAccount, _, _ := newSimpleBlockchain(t, params.WeightedRandom, 10)
+	defer os.RemoveAll(workspace)
+	miscDB := node.ChainDB().GetMiscDB()
+
+	// size up state trie to be prepared for migration
+	deployRandomTxs(t, node.TxPool(), chainID, richAccount, 100)
+	time.Sleep(time.Second)
+
+}
+
+// migration should not start if staking information is not store
+func TestMigration_PreRequisiteMiscDB(t *testing.T) {
+	fullNode, node, validator, chainID, workspace, richAccount, _, _ := newSimpleBlockchain(t, params.WeightedRandom, 10)
+	defer os.RemoveAll(workspace)
+	miscDB := node.ChainDB().GetMiscDB()
+
+	// size up state trie to be prepared for migration
+	deployRandomTxs(t, node.TxPool(), chainID, richAccount, 100)
+	time.Sleep(time.Second)
+
+}
+
+func newSimpleBlockchain(t *testing.T, proposerPolicy uint64, numAccounts int) (*node.Node, *cn.CN, *TestAccountType, *big.Int, string, *TestAccountType, []*TestAccountType, []*TestAccountType) {
 	//if testing.Verbose() {
 	//	enableLog() // Change verbosity level in the function if needed
 	//}
 
 	t.Log("=========== create blockchain ==============")
-	fullNode, node, validator, chainID, workspace := newBlockchain(t)
+	fullNode, node, validator, chainID, workspace := newBlockchain(t, params.RoundRobin)
 	richAccount, accounts, contractAccounts := createAccount(t, numAccounts, validator)
 	time.Sleep(5 * time.Second)
 
@@ -139,7 +180,7 @@ func restartNode(t *testing.T, fullNode *node.Node, node *cn.CN, workspace strin
 
 func startNode(t *testing.T, workspace string, validator *TestAccountType) (fullNode *node.Node, node *cn.CN) {
 	t.Log("=========== starting node ==============")
-	newFullNode, newNode := newKlaytnNode(t, workspace, validator)
+	newFullNode, newNode := newKlaytnNode(t, workspace, validator, params.RoundRobin)
 	if err := newNode.StartMining(false); err != nil {
 		t.Fatal()
 	}
