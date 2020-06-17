@@ -17,6 +17,7 @@
 package tests
 
 import (
+	"encoding/json"
 	"github.com/klaytn/klaytn/common"
 	"github.com/klaytn/klaytn/node"
 	"github.com/klaytn/klaytn/node/cn"
@@ -111,7 +112,35 @@ func TestMigration_StartMigrationByMiscDB(t *testing.T) {
 
 // staking information should be stored in miscDB
 func TestMigration_StakinInfoDBInMiscDB(t *testing.T) {
-	params.SetStakingUpdateInterval(5)
+	params.SetStakingUpdateInterval(3)
+	_, node, _, chainID, workspace, richAccount, _, _ := newSimpleBlockchain(t, params.WeightedRandom, 10)
+	defer os.RemoveAll(workspace)
+	miscDB := node.ChainDB().GetMiscDB()
+
+	// wait for staking info to be made
+	time.Sleep(time.Duration(2*params.StakeUpdateInterval) * time.Second)
+
+	// check if staking info is stored in DB before migration
+	checkStakingInfoInDB(t, miscDB, node.BlockChain().CurrentHeader().Number.Uint64())
+
+	// size up state trie to be prepared for migration
+	deployRandomTxs(t, node.TxPool(), chainID, richAccount, 100)
+	time.Sleep(time.Second)
+
+	// check if staking info is stored in DB on prerequisite of migration
+	startMigration(t, node)
+	time.Sleep(1 * time.Second)
+	checkStakingInfoInDB(t, miscDB, node.BlockChain().CurrentHeader().Number.Uint64())
+	checkStakingInfoInDB(t, miscDB, node.BlockChain().CurrentHeader().Number.Uint64()+params.StakingUpdateInterval())
+
+	// check if staking info is sotred in DB after migration
+	waitMigrationEnds(t, node)
+	time.Sleep(time.Duration(params.StakeUpdateInterval) * time.Second)
+	checkStakingInfoInDB(t, miscDB, node.BlockChain().CurrentHeader().Number.Uint64())
+}
+
+// migration should not start if staking information is not stored
+func TestMigration_PrerequisiteStakingInfoFail(t *testing.T) {
 	fullNode, node, validator, chainID, workspace, richAccount, _, _ := newSimpleBlockchain(t, params.WeightedRandom, 10)
 	defer os.RemoveAll(workspace)
 	miscDB := node.ChainDB().GetMiscDB()
@@ -120,24 +149,10 @@ func TestMigration_StakinInfoDBInMiscDB(t *testing.T) {
 	deployRandomTxs(t, node.TxPool(), chainID, richAccount, 100)
 	time.Sleep(time.Second)
 
-	assert.NotNil(t, reward.GetStakingInfo(node.BlockChain().CurrentHeader().Number.Uint64()))
-
 }
 
-// migration should not start if staking information is not store,
-func TestMigration_PreRequisiteStakinInfoDB(t *testing.T) {
-	fullNode, node, validator, chainID, workspace, richAccount, _, _ := newSimpleBlockchain(t, params.WeightedRandom, 10)
-	defer os.RemoveAll(workspace)
-	miscDB := node.ChainDB().GetMiscDB()
-
-	// size up state trie to be prepared for migration
-	deployRandomTxs(t, node.TxPool(), chainID, richAccount, 100)
-	time.Sleep(time.Second)
-
-}
-
-// migration should not start if staking information is not store
-func TestMigration_PreRequisiteMiscDB(t *testing.T) {
+// migration should not start if staking information is not stored
+func TestMigration_PrerequisiteMiscDBFail(t *testing.T) {
 	fullNode, node, validator, chainID, workspace, richAccount, _, _ := newSimpleBlockchain(t, params.WeightedRandom, 10)
 	defer os.RemoveAll(workspace)
 	miscDB := node.ChainDB().GetMiscDB()
@@ -154,7 +169,7 @@ func newSimpleBlockchain(t *testing.T, proposerPolicy uint64, numAccounts int) (
 	//}
 
 	t.Log("=========== create blockchain ==============")
-	fullNode, node, validator, chainID, workspace := newBlockchain(t, params.RoundRobin)
+	fullNode, node, validator, chainID, workspace := newBlockchain(t, proposerPolicy)
 	richAccount, accounts, contractAccounts := createAccount(t, numAccounts, validator)
 	time.Sleep(5 * time.Second)
 
@@ -200,4 +215,13 @@ func waitMigrationEnds(t *testing.T, node *cn.CN) {
 		t.Log("state trie migration is processing; sleep for a second before a new migration")
 		time.Sleep(time.Second)
 	}
+}
+
+func checkStakingInfoInDB(t *testing.T, miscDB database.Database, currentNum uint64) {
+	stakingNum := params.CalcStakingBlockNumber(currentNum)
+	jsonByte, err := miscDB.Get(append([]byte("stakingInfo"), common.Int64ToByteLittleEndian(stakingNum)...))
+	assert.NoError(t, err)
+	stakingInfo := new(reward.StakingInfo)
+	assert.NoError(t, json.Unmarshal(jsonByte, stakingInfo))
+	assert.Equal(t, reward.GetStakingInfo(currentNum), stakingInfo)
 }
