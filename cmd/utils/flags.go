@@ -314,6 +314,11 @@ var (
 		Usage: "Password file to use for non-interactive password input",
 		Value: "",
 	}
+	StartBlocknumberFlag = cli.Uint64Flag{
+		Name:  "start-number",
+		Usage: "block number to start node (default : start on latest block)",
+		Value: 0,
+	}
 
 	VMEnableDebugFlag = cli.BoolFlag{
 		Name:  "vmdebug",

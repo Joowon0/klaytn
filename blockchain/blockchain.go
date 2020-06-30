@@ -56,6 +56,7 @@ var (
 	ErrQuitBySignal      = errors.New("quit by signal")
 	ErrNotInWarmUp       = errors.New("not in warm up")
 	logger               = log.NewModuleLogger(log.Blockchain)
+	StartBlockNumber     uint64
 )
 
 // Below is the list of the constants for cache size.
@@ -298,7 +299,16 @@ func (bc *BlockChain) getProcInterrupt() bool {
 // assumes that the chain manager mutex is held.
 func (bc *BlockChain) loadLastState() error {
 	// Restore the last known head block
-	head := bc.db.ReadHeadBlockHash()
+
+	head := common.Hash{}
+	if StartBlockNumber != 0 {
+		head = bc.GetBlockByNumber(StartBlockNumber).Root()
+		logger.Info("starting blockchain from given block number", "blocknum", StartBlockNumber, "root", head)
+	}
+	if head == (common.Hash{}) {
+		head = bc.db.ReadHeadBlockHash()
+	}
+
 	if head == (common.Hash{}) {
 		// Corrupt or empty database, init from scratch
 		logger.Info("Empty database, resetting chain")

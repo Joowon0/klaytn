@@ -24,6 +24,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/klaytn/klaytn/blockchain"
 	"github.com/klaytn/klaytn/cmd/utils"
 	"github.com/klaytn/klaytn/datasync/dbsyncer"
 	"github.com/klaytn/klaytn/log"
@@ -230,6 +231,8 @@ func makeServiceChainConfig(ctx *cli.Context) (config sc.SCConfig) {
 	cfg.VTRecovery = ctx.GlobalBool(utils.VTRecoveryFlag.Name)
 	cfg.VTRecoveryInterval = ctx.GlobalUint64(utils.VTRecoveryIntervalFlag.Name)
 	cfg.ServiceChainConsensus = utils.ServiceChainConsensusFlag.Value
+
+	blockchain.StartBlockNumber = ctx.GlobalUint64(utils.StartBlocknumberFlag.Name)
 
 	return cfg
 }

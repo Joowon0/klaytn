@@ -27,6 +27,7 @@ import (
 
 // Common flags that configure the node
 var CommonNodeFlags = []cli.Flag{
+	utils.StartBlocknumberFlag,
 	utils.BootnodesFlag,
 	utils.IdentityFlag,
 	utils.UnlockedAccountFlag,
