@@ -31,6 +31,7 @@ const (
 	BadgerDB
 	MemoryDB
 	PartitionedDB
+	DynamoDB
 )
 
 func (dbType DBType) String() string {

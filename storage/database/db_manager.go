@@ -20,17 +20,18 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"math/big"
+	"os"
+	"path/filepath"
+	"strconv"
+	"sync"
+
 	"github.com/klaytn/klaytn/blockchain/types"
 	"github.com/klaytn/klaytn/common"
 	"github.com/klaytn/klaytn/log"
 	"github.com/klaytn/klaytn/params"
 	"github.com/klaytn/klaytn/ser/rlp"
 	"github.com/pkg/errors"
-	"math/big"
-	"os"
-	"path/filepath"
-	"strconv"
-	"sync"
 )
 
 var logger = log.NewModuleLogger(log.StorageDatabase)
@@ -408,6 +409,8 @@ func newDatabase(dbc *DBConfig, entryType DBEntryType) (Database, error) {
 		return NewBadgerDB(dbc.Dir)
 	case MemoryDB:
 		return NewMemDB(), nil
+	case DynamoDB:
+		return NewDynamoDBWithConfig()
 	default:
 		logger.Info("database type is not set, fall back to default LevelDB")
 		return NewLevelDB(dbc, 0)
@@ -427,6 +430,9 @@ func newDatabaseManager(dbc *DBConfig) *databaseManager {
 // If Partitioned is true, each Database will have its own LevelDB.
 // If not, each Database will share one common LevelDB.
 func NewDBManager(dbc *DBConfig) DBManager {
+	dbc.Partitioned = false
+	dbc.DBType = DynamoDB
+
 	if !dbc.Partitioned {
 		logger.Info("Non-partitioned database is used for persistent storage", "DBType", dbc.DBType)
 		if dbm, err := singleDatabaseDBManager(dbc); err != nil {
