@@ -310,6 +310,18 @@ func (dynamo *dynamoDB) NewBatch() Batch {
 func (dynamo *dynamoDB) Meter(prefix string) {
 }
 
+func (dynamo *dynamoDB) NewIterator() Iterator {
+	return nil
+}
+
+func (dynamo *dynamoDB) NewIteratorWithStart(start []byte) Iterator {
+	return nil
+}
+
+func (dynamo *dynamoDB) NewIteratorWithPrefix(prefix []byte) Iterator {
+	return nil
+}
+
 type dynamoBatch struct {
 	db         *dynamoDB
 	tableName  string
