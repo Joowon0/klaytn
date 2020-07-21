@@ -26,9 +26,6 @@ type s3FileDB struct {
 // newS3FileDB returns a new s3FileDB with the given region, endpoint and bucketName.
 // If the given bucket does not exist, it creates one.
 func newS3FileDB(region, endpoint, bucketName string) (*s3FileDB, error) {
-	fmt.Println("region", region)
-	fmt.Println("endpoint", endpoint)
-	fmt.Println("bucketName", bucketName)
 	localLogger := logger.NewWith("endpoint", endpoint, "bucketName", bucketName)
 
 	session, err := session.NewSession(&aws.Config{

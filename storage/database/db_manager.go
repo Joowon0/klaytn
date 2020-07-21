@@ -380,6 +380,8 @@ func partitionedDatabaseDBManager(dbc *DBConfig) (*databaseManager, error) {
 			fallthrough
 		case StateTrieDB:
 			newDBC := getDBEntryConfig(dbc, entryType, dir)
+			newDBC.DBType = DynamoDB
+			newDBC.Partitioned = false
 			if dbc.NumStateTriePartitions > 1 {
 				db, err = newPartitionedDB(newDBC, entryType, dbc.NumStateTriePartitions)
 			} else {
@@ -387,6 +389,7 @@ func partitionedDatabaseDBManager(dbc *DBConfig) (*databaseManager, error) {
 			}
 		default:
 			newDBC := getDBEntryConfig(dbc, entryType, dir)
+			newDBC.DBType = LevelDB
 			db, err = newDatabase(newDBC, entryType)
 		}
 
@@ -430,9 +433,6 @@ func newDatabaseManager(dbc *DBConfig) *databaseManager {
 // If Partitioned is true, each Database will have its own LevelDB.
 // If not, each Database will share one common LevelDB.
 func NewDBManager(dbc *DBConfig) DBManager {
-	dbc.Partitioned = false
-	dbc.DBType = DynamoDB
-
 	if !dbc.Partitioned {
 		logger.Info("Non-partitioned database is used for persistent storage", "DBType", dbc.DBType)
 		if dbm, err := singleDatabaseDBManager(dbc); err != nil {
