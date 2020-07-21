@@ -44,6 +44,8 @@ func (dbType DBType) String() string {
 		return "MemoryDB"
 	case PartitionedDB:
 		return "PartitionedDB"
+	case DynamoDB:
+		return "DynamoDB"
 	default:
 		logger.Error("Undefined DBType entered.", "entered DBType", dbType)
 		return "undefined"
