@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -46,8 +47,6 @@ type dynamoDB struct {
 	db     *dynamodb.DynamoDB
 	//fdb    fileDB
 	logger log.Logger // Contextual logger tracking the database path
-
-	internalBatch Batch
 }
 
 func NewDynamoDB(config *DynamoDBConfig) (*dynamoDB, error) {
@@ -70,36 +69,30 @@ func NewDynamoDB(config *DynamoDBConfig) (*dynamoDB, error) {
 	}
 
 	// Check if the table exists or not
-	tableExists, err := dynamoDB.hasTable()
-	if err != nil {
-		dynamoDB.logger.Error("")
-		return nil, err
+	for {
+		tableStatus, err := dynamoDB.tableStatus()
+		if err != nil {
+			if strings.Contains(err.Error(), "ResourceNotFoundException") {
+				if err := dynamoDB.createTable(); err != nil {
+					dynamoDB.logger.Crit("unable to create dynamo table", "err", err.Error())
+					return nil, err
+				}
+			} else {
+				dynamoDB.logger.Crit("unable to get dynamo table status", "err", err.Error())
+				return nil, err
+			}
+		}
+
+		switch tableStatus {
+		case dynamodb.TableStatusActive:
+			return dynamoDB, nil
+		case dynamodb.TableStatusDeleting, dynamodb.TableStatusArchiving, dynamodb.TableStatusArchived:
+			return nil, errors.New("failed to get DynamoDB table, table status : " + tableStatus)
+		default:
+			time.Sleep(1 * time.Second)
+			dynamoDB.logger.Info("waiting for the table to be ready", "table name", dynamoDB.config.TableName, "table status", tableStatus)
+		}
 	}
-
-	//s3FileDB, err := newS3FileDB("ap-northeast-2", "http://localhost:4572", "kas-test-bucket-12345")
-	//if err != nil {
-	//	dynamoDB.logger.Error("")
-	//	return nil, err
-	//}
-	//
-	//dynamoDB.fdb = s3FileDB
-
-	dynamoDB.internalBatch = dynamoDB.NewBatch()
-
-	// Table already exists, return here without doing anything
-	if tableExists {
-		dynamoDB.logger.Info("")
-		return dynamoDB, nil
-	}
-
-	//// Table does not exist, create one here
-	//if err := dynamoDB.createTable(); err != nil {
-	//	dynamoDB.logger.Error("")
-	//	return nil, err
-	//}
-
-	dynamoDB.logger.Info("")
-	return dynamoDB, nil
 }
 
 func (dynamo *dynamoDB) createTable() error {
@@ -129,7 +122,7 @@ func (dynamo *dynamoDB) createTable() error {
 
 	_, err := dynamo.db.CreateTable(input)
 	if err != nil {
-		dynamo.logger.Error("Error while creating the DynamoDB table", "tableName", dynamo.config.TableName)
+		dynamo.logger.Error("Error while creating the DynamoDB table", "err", err, "tableName", dynamo.config.TableName)
 		return err
 	}
 	dynamo.logger.Info("Successfully created the Dynamo table", "tableName", dynamo.config.TableName)
@@ -145,26 +138,22 @@ func (dynamo *dynamoDB) deleteTable() error {
 	return nil
 }
 
-func (dynamo *dynamoDB) hasTable() (bool, error) {
-	listTableLimit := int64(100)
-	output, err := dynamo.db.ListTables(&dynamodb.ListTablesInput{
-		ExclusiveStartTableName: &dynamo.config.TableName,
-		Limit:                   &listTableLimit,
-	})
+func (dynamo *dynamoDB) tableStatus() (string, error) {
+	desc, err := dynamo.tableDescription()
 	if err != nil {
-		return false, err
+		return "", err
 	}
 
-	if len(output.TableNames) == 0 {
-		return false, nil
+	return *desc.TableStatus, nil
+}
+
+func (dynamo *dynamoDB) tableDescription() (*dynamodb.TableDescription, error) {
+	describe, err := dynamo.db.DescribeTable(&dynamodb.DescribeTableInput{TableName: aws.String(dynamo.config.TableName)})
+	if describe == nil {
+		return nil, err
 	}
 
-	for _, tableName := range output.TableNames {
-		if *tableName == dynamo.config.TableName {
-			return true, nil
-		}
-	}
-	return false, nil
+	return describe.Table, err
 }
 
 func (dynamo *dynamoDB) Type() DBType {
@@ -216,11 +205,6 @@ func (dynamo *dynamoDB) Put(key []byte, val []byte) error {
 	}
 
 	return nil
-}
-
-func (dynamo *dynamoDB) WriteInternalBatch() {
-	dynamo.internalBatch.Write()
-	dynamo.internalBatch.Reset()
 }
 
 // Has returns true if the corresponding value to the given key exists.
@@ -296,11 +280,6 @@ func (dynamo *dynamoDB) Delete(key []byte) error {
 }
 
 func (dynamo *dynamoDB) Close() {
-	if err := dynamo.internalBatch.Write(); err != nil {
-		logger.Error("", "err", err)
-	}
-
-	dynamo.logger.Info("There's nothing to do when closing DynamoDB")
 }
 
 func (dynamo *dynamoDB) NewBatch() Batch {
