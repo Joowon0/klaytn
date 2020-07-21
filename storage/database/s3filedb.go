@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/klaytn/klaytn/common/hexutil"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -85,7 +87,7 @@ func (s3DB *s3FileDB) write(item item) (uri, error) {
 	//fmt.Println("write to s3", "bucket", s3DB.bucket, "Key", string(item.key[:10]), "body", item.val[:10], "contentType", "application/octet-stream")
 	o := &s3.PutObjectInput{
 		Bucket:      aws.String(s3DB.bucket),
-		Key:         aws.String(string(item.key)),
+		Key:         aws.String(hexutil.Encode(item.key)),
 		Body:        bytes.NewReader(item.val),
 		ContentType: aws.String("application/octet-stream"),
 	}
@@ -95,7 +97,7 @@ func (s3DB *s3FileDB) write(item item) (uri, error) {
 		return "", fmt.Errorf("failed to write item to S3. key: %v, err: %w", string(item.key), err)
 	}
 
-	return uri(item.key), nil
+	return uri(hexutil.Encode(item.key)), nil
 }
 
 // read gets the data from the bucket with the given key.
@@ -107,7 +109,7 @@ func (s3DB *s3FileDB) read(key []byte) ([]byte, error) {
 		//IfModifiedSince:            nil,
 		//IfNoneMatch:                nil,
 		//IfUnmodifiedSince:          nil,
-		Key: aws.String(string(key)),
+		Key: aws.String(hexutil.Encode(key)),
 		//PartNumber:                 nil,
 		//Range:                      nil,
 		//RequestPayer:               nil,
@@ -161,7 +163,7 @@ func (s3DB *s3FileDB) read(key []byte) ([]byte, error) {
 func (s3DB *s3FileDB) delete(key []byte) error {
 	_, err := s3DB.s3.DeleteObject(&s3.DeleteObjectInput{
 		Bucket: aws.String(s3DB.bucket),
-		Key:    aws.String(string(key)),
+		Key:    aws.String(hexutil.Encode(key)),
 		//BypassGovernanceRetention: nil,
 		//MFA:                       nil,
 		//RequestPayer:              nil,

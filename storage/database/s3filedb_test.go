@@ -3,7 +3,6 @@ package database
 import (
 	"bytes"
 	"fmt"
-	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,8 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/stretchr/testify/suite"
 )
-
-var testRand *rand.Rand
 
 type SuiteS3FileDB struct {
 	suite.Suite
@@ -45,7 +42,6 @@ func (s *SuiteS3FileDB) SetupSuite() {
 
 	s.s3DB = s3DB
 	s.testBucketName = testBucketName
-	testRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 }
 
 func (s *SuiteS3FileDB) TearDownSuite() {
@@ -60,15 +56,15 @@ func TestSuiteS3FileDB(t *testing.T) {
 
 func TestRand(t *testing.T) {
 	cmm := common.MakeRandomBytes(10)
-	n := randStrBytes(10)
+	n := common.MakeRandomBytes(10)
 
 	fmt.Println(string(cmm))
 	fmt.Println(string(n))
 }
 
 func (s *SuiteS3FileDB) TestS3FileDB() {
-	testKey := randStrBytes(100)
-	testVal := randStrBytes(1024 * 1024)
+	testKey := common.MakeRandomBytes(100)
+	testVal := common.MakeRandomBytes(1024 * 1024)
 
 	_, err := s.s3DB.read(testKey)
 
@@ -97,10 +93,10 @@ func (s *SuiteS3FileDB) TestS3FileDB() {
 }
 
 func (s *SuiteS3FileDB) TestS3FileDB_Overwrite() {
-	testKey := randStrBytes(testRand.Intn(1000))
+	testKey := common.MakeRandomBytes(256)
 	var testVals [][]byte
 	for i := 0; i < 10; i++ {
-		testVals = append(testVals, randStrBytes(1024*1024))
+		testVals = append(testVals, common.MakeRandomBytes(1024*1024))
 	}
 
 	_, err := s.s3DB.read(testKey)
@@ -130,7 +126,7 @@ func (s *SuiteS3FileDB) TestS3FileDB_Overwrite() {
 }
 
 func (s *SuiteS3FileDB) TestS3FileDB_EmptyDelete() {
-	testKey := randStrBytes(testRand.Intn(1000))
+	testKey := common.MakeRandomBytes(256)
 	s.NoError(s.s3DB.delete(testKey))
 	s.NoError(s.s3DB.delete(testKey))
 	s.NoError(s.s3DB.delete(testKey))
