@@ -1,6 +1,7 @@
 package database
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -25,7 +26,8 @@ type DynamoDBConfig struct {
 	WriteCapacityUnits int64
 }
 
-const dynamoItemSizeLimit = 400 * 1024
+const dynamoReadSizeLimit = 400 * 1024
+const dynamoWriteSizeLimit = 100 * 1024
 
 /*
  * Please Run DynamoDB local with docker
@@ -45,7 +47,7 @@ func createTestDynamoDBConfig() *DynamoDBConfig {
 type dynamoDB struct {
 	config *DynamoDBConfig
 	db     *dynamodb.DynamoDB
-	//fdb    fileDB
+	fdb    fileDB
 	logger log.Logger // Contextual logger tracking the database path
 }
 
@@ -68,7 +70,14 @@ func NewDynamoDB(config *DynamoDBConfig) (*dynamoDB, error) {
 		logger: logger.NewWith("region", config.Region, "endPoint", config.Endpoint),
 	}
 
-	// Check if the table exists or not
+	s3FileDB, err := newS3FileDB(config.Region, "https://s3.ap-northeast-2.amazonaws.com", config.TableName+"-bucket")
+	if err != nil {
+		dynamoDB.logger.Error("Unable to create/get S3FileDB", "DB", config.TableName+"-bucket")
+		return nil, err
+	}
+	dynamoDB.fdb = s3FileDB
+
+	// Check if the table is ready to serve
 	for {
 		tableStatus, err := dynamoDB.tableStatus()
 		if err != nil {
@@ -113,6 +122,8 @@ func (dynamo *dynamoDB) createTable() error {
 			//	KeyType:       aws.String("RANGE"),
 			//},
 		},
+		// TODO change ProvisionedThroughput according to node status
+		//      check dynamodb.updateTable
 		ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
 			ReadCapacityUnits:  aws.Int64(dynamo.config.ReadCapacityUnits),
 			WriteCapacityUnits: aws.Int64(dynamo.config.WriteCapacityUnits),
@@ -177,14 +188,15 @@ func (dynamo *dynamoDB) Put(key []byte, val []byte) error {
 	//	 "putElapsedTime", time.Since(start))
 	//return dynamo.internalBatch.Put(key, val)
 
-	//if len(val) > dynamoItemSizeLimit {
-	//	_, err := dynamo.fdb.write(item{key: key, val: val})
-	//	if err != nil {
-	//		return err
-	//	}
-	//
-	//	return dynamo.Put(key, overSizedDataPrefix)
-	//}
+	if len(val) > dynamoWriteSizeLimit {
+		_, err := dynamo.fdb.write(item{key: key, val: val})
+		if err != nil {
+			fmt.Println("failed to write to s3")
+			return err
+		}
+
+		return dynamo.Put(key, overSizedDataPrefix)
+	}
 
 	data := DynamoData{Key: key, Val: val}
 	marshaledData, err := dynamodbattribute.MarshalMap(data)
@@ -252,11 +264,11 @@ func (dynamo *dynamoDB) Get(key []byte) ([]byte, error) {
 		return nil, dataNotFoundErr
 	}
 
-	//if !bytes.Equal(data.Val, overSizedDataPrefix) {
-	return data.Val, nil
-	//} else {
-	//	return dynamo.fdb.read(key)
-	//}
+	if !bytes.Equal(data.Val, overSizedDataPrefix) {
+		return data.Val, nil
+	} else {
+		return dynamo.fdb.read(key)
+	}
 }
 
 // Delete deletes the key from the queue and database
@@ -302,20 +314,20 @@ func (dynamo *dynamoDB) NewIteratorWithPrefix(prefix []byte) Iterator {
 }
 
 type dynamoBatch struct {
-	db         *dynamoDB
-	tableName  string
-	batchItems []*dynamodb.WriteRequest
-	//oversizeBatchItems []item
-	size int
+	db                 *dynamoDB
+	tableName          string
+	batchItems         []*dynamodb.WriteRequest
+	oversizeBatchItems []item
+	size               int
 }
 
 func (batch *dynamoBatch) Put(key, val []byte) error {
 	// If the size of the item is larger than the limit, it should be handled in different way
-	//if len(val) > dynamoItemSizeLimit {
-	//	batch.oversizeBatchItems = append(batch.oversizeBatchItems, item{key: key, val: val})
-	//	batch.size += len(val)
-	//	return nil
-	//}
+	if len(val) > dynamoWriteSizeLimit {
+		batch.oversizeBatchItems = append(batch.oversizeBatchItems, item{key: key, val: val})
+		batch.size += len(val)
+		return nil
+	}
 
 	data := DynamoData{Key: key, Val: val}
 	marshaledData, err := dynamodbattribute.MarshalMap(data)
@@ -366,19 +378,19 @@ func (batch *dynamoBatch) Write() error {
 		writtenItems += thisTime
 	}
 
-	//for _, item := range batch.oversizeBatchItems {
-	//	go func() {
-	//		_, err := batch.db.fdb.write(item)
-	//		if err == nil {
-	//			if err2 := batch.db.Put(item.key, overSizedDataPrefix); err2 != nil {
-	//				errCh <- err2
-	//				numErrsToCheck++
-	//			}
-	//		}
-	//		errCh <- err
-	//		numErrsToCheck++
-	//	}()
-	//}
+	for _, item := range batch.oversizeBatchItems {
+		go func() {
+			_, err := batch.db.fdb.write(item)
+			if err == nil {
+				if err2 := batch.db.Put(item.key, overSizedDataPrefix); err2 != nil {
+					errCh <- err2
+					numErrsToCheck++
+				}
+			}
+			errCh <- err
+			numErrsToCheck++
+		}()
+	}
 
 	for i := 0; i < numErrsToCheck; i++ {
 		if err := <-errCh; err != nil {
