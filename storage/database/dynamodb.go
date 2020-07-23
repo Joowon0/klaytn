@@ -317,7 +317,7 @@ func (dynamo *dynamoDB) NewIteratorWithPrefix(prefix []byte) Iterator {
 type dynamoBatch struct {
 	db                 *dynamoDB
 	tableName          string
-	batchItems         []*dynamodb.WriteRequest
+	batchItems         []map[string]*dynamodb.AttributeValue
 	oversizeBatchItems []item
 	size               int
 }
@@ -337,69 +337,33 @@ func (batch *dynamoBatch) Put(key, val []byte) error {
 		return err
 	}
 
-	writeRequest := &dynamodb.WriteRequest{
-		PutRequest: &dynamodb.PutRequest{Item: marshaledData},
-	}
-	batch.batchItems = append(batch.batchItems, writeRequest)
+	batch.batchItems = append(batch.batchItems, marshaledData)
 	batch.size += len(val)
 	return nil
 }
 
 func (batch *dynamoBatch) Write() error {
-	if batch.size == 0 {
-		return nil
-	}
+	//start := time.Now()
+	var errs []error
 
-	start := time.Now()
+	for _, item := range batch.batchItems {
+		params := &dynamodb.PutItemInput{
+			TableName: aws.String(batch.tableName),
+			Item:      item,
+		}
 
-	writtenItems := 0
-	totalItems := len(batch.batchItems)
-
-	errCh := make(chan error, totalItems/25+1)
-	numErrsToCheck := 0
-
-	logger.Info("", "errChSize", cap(errCh))
-
-	for writtenItems < totalItems {
-		thisTime := int(math.Min(25.0, float64(totalItems-writtenItems)))
-		thisTimeItems := batch.batchItems[writtenItems : writtenItems+thisTime]
-
-		go func(bis []*dynamodb.WriteRequest) {
-			_, err := batch.db.db.BatchWriteItem(&dynamodb.BatchWriteItemInput{
-				RequestItems: map[string][]*dynamodb.WriteRequest{
-					batch.tableName: bis,
-				},
-				ReturnConsumedCapacity:      nil,
-				ReturnItemCollectionMetrics: nil,
-			})
-			errCh <- err
-			numErrsToCheck++
-		}(thisTimeItems)
-
-		writtenItems += thisTime
-	}
-
-	for _, item := range batch.oversizeBatchItems {
-		go func() {
-			_, err := batch.db.fdb.write(item)
-			if err == nil {
-				if err2 := batch.db.Put(item.key, overSizedDataPrefix); err2 != nil {
-					errCh <- err2
-					numErrsToCheck++
-				}
-			}
-			errCh <- err
-			numErrsToCheck++
-		}()
-	}
-
-	for i := 0; i < numErrsToCheck; i++ {
-		if err := <-errCh; err != nil {
-			return err
+		//marshalTime := time.Since(start)
+		_, err := batch.db.db.PutItem(params)
+		if err != nil {
+			errs = append(errs, err)
 		}
 	}
 
-	logger.Info("batch write time 22222", "elapsedTime", time.Since(start))
+	//logger.Info("batch write time 22222", "elapsedTime", time.Since(start))
+
+	for _, err := range errs {
+		logger.Error("error while batch write", "err", err)
+	}
 	return nil
 }
 
@@ -408,7 +372,7 @@ func (batch *dynamoBatch) ValueSize() int {
 }
 
 func (batch *dynamoBatch) Reset() {
-	batch.batchItems = []*dynamodb.WriteRequest{}
+	batch.batchItems = []map[string]*dynamodb.AttributeValue{}
 	//batch.oversizeBatchItems = []item{}
 	batch.size = 0
 }
