@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -243,6 +242,7 @@ func (dynamo *dynamoDB) Get(key []byte) ([]byte, error) {
 				B: key,
 			},
 		},
+		ConsistentRead: aws.Bool(true),
 	}
 
 	result, err := dynamo.db.GetItem(params)

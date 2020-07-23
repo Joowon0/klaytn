@@ -168,3 +168,9 @@ func (s3DB *s3FileDB) delete(key []byte) error {
 	})
 	return err
 }
+
+func (s3DB *s3FileDB) deleteBucket() {
+	if _, err := s3DB.s3.DeleteBucket(&s3.DeleteBucketInput{Bucket: aws.String(s3DB.bucket)}); err != nil {
+		s3DB.logger.Error("failed to delete the test bucket", "err", err, "bucketName", s3DB.bucket)
+	}
+}

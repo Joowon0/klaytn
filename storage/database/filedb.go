@@ -14,4 +14,5 @@ type fileDB interface {
 	write(items item) (uri, error)
 	read(key []byte) ([]byte, error)
 	delete(key []byte) error
+	deleteBucket()
 }
