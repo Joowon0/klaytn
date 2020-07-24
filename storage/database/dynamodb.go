@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -106,6 +105,7 @@ func NewDynamoDB(config *DynamoDBConfig) (*dynamoDB, error) {
 
 func (dynamo *dynamoDB) createTable() error {
 	input := &dynamodb.CreateTableInput{
+		BillingMode: aws.String("PAY_PER_REQUEST"),
 		AttributeDefinitions: []*dynamodb.AttributeDefinition{
 			{
 				AttributeName: aws.String("Key"),
@@ -124,12 +124,13 @@ func (dynamo *dynamoDB) createTable() error {
 		},
 		// TODO change ProvisionedThroughput according to node status
 		//      check dynamodb.updateTable
-		ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
-			ReadCapacityUnits:  aws.Int64(dynamo.config.ReadCapacityUnits),
-			WriteCapacityUnits: aws.Int64(dynamo.config.WriteCapacityUnits),
-		},
+		//ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+		//	ReadCapacityUnits:  aws.Int64(dynamo.config.ReadCapacityUnits),
+		//	WriteCapacityUnits: aws.Int64(dynamo.config.WriteCapacityUnits),
+		//},
 		TableName: aws.String(dynamo.config.TableName),
 	}
+	dynamo.db.UpdateTable()
 
 	_, err := dynamo.db.CreateTable(input)
 	if err != nil {
@@ -344,26 +345,23 @@ func (batch *dynamoBatch) Put(key, val []byte) error {
 
 func (batch *dynamoBatch) Write() error {
 	//start := time.Now()
-	var errs []error
 
 	for _, item := range batch.batchItems {
-		params := &dynamodb.PutItemInput{
-			TableName: aws.String(batch.tableName),
-			Item:      item,
-		}
+		go func(db *dynamodb.DynamoDB, tableName *string, item map[string]*dynamodb.AttributeValue, logger log.Logger) {
+			params := &dynamodb.PutItemInput{
+				TableName: tableName,
+				Item:      item,
+			}
 
-		//marshalTime := time.Since(start)
-		_, err := batch.db.db.PutItem(params)
-		if err != nil {
-			errs = append(errs, err)
-		}
+			//marshalTime := time.Since(start)
+			_, err := db.PutItem(params)
+			if err != nil {
+				logger.Error("Failed to put item in DynamoDB")
+			}
+		}(batch.db.db, aws.String(batch.tableName), item, batch.db.logger)
 	}
 
 	//logger.Info("batch write time 22222", "elapsedTime", time.Since(start))
-
-	for _, err := range errs {
-		logger.Error("error while batch write", "err", err)
-	}
 	return nil
 }
 
