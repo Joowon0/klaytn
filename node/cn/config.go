@@ -99,6 +99,7 @@ type Config struct {
 	LevelDBCompression     database.LevelDBCompressionType
 	LevelDBBufferPool      bool
 	LevelDBCacheSize       int
+	DynamoDBTableName      string
 	TrieCacheSize          int
 	TrieTimeout            time.Duration
 	TrieBlockInterval      uint

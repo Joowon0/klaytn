@@ -10,7 +10,7 @@ import (
 )
 
 func TestDynamoDB(t *testing.T) {
-	dynamo, err := NewDynamoDB(createTestDynamoDBConfig())
+	dynamo, err := NewDynamoDB(createTestDynamoDBConfig(), "winnie-test")
 	defer dynamo.DeletedDB()
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +33,8 @@ func TestDynamoDB(t *testing.T) {
 }
 
 func TestDynamoBatch(t *testing.T) {
-	dynamo, err := NewDynamoDB(createTestDynamoDBConfig())
+	t.Log("Num go go routine b4", runtime.NumGoroutine())
+	dynamo, err := NewDynamoDB(createTestDynamoDBConfig(), "winnie-test")
 	defer dynamo.DeletedDB()
 	if err != nil {
 		t.Fatal(err)

@@ -26,8 +26,6 @@ const dynamoWriteSizeLimit = 100 * 1024
 const dynamoBatchWriteMaxCount = 5.0
 const commitResultChSizeLimit = 500
 
-var tableName = "dynamoDB" + strconv.Itoa(time.Now().Nanosecond())
-
 type DynamoDBConfig struct {
 	Region             string
 	Endpoint           string
@@ -45,7 +43,7 @@ func createTestDynamoDBConfig() *DynamoDBConfig {
 	return &DynamoDBConfig{
 		Region:             "ap-northeast-2",
 		Endpoint:           "https://dynamodb.ap-northeast-2.amazonaws.com", //"http://localhost:4569",  "https://dynamodb.ap-northeast-2.amazonaws.com"
-		TableName:          tableName,
+		TableName:          "dynamoDB-test" + strconv.Itoa(time.Now().Nanosecond()),
 		ReadCapacityUnits:  100,
 		WriteCapacityUnits: 100,
 	}
@@ -58,9 +56,13 @@ type dynamoDB struct {
 	logger log.Logger // Contextual logger tracking the database path
 }
 
-func NewDynamoDB(config *DynamoDBConfig) (*dynamoDB, error) {
+func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 	if config == nil {
 		return nil, nilDynamoConfigErr
+	}
+
+	if len(tableName) != 0 {
+		config.TableName = tableName
 	}
 
 	session := session.Must(session.NewSessionWithOptions(session.Options{
@@ -200,7 +202,6 @@ func (dynamo *dynamoDB) Put(key []byte, val []byte) error {
 	if len(val) > dynamoWriteSizeLimit {
 		_, err := dynamo.fdb.write(item{key: key, val: val})
 		if err != nil {
-			fmt.Println("failed to write to s3")
 			return err
 		}
 

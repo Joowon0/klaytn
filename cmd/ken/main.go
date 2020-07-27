@@ -102,6 +102,7 @@ var enHelpFlagGroups = []utils.FlagGroup{
 			utils.NumStateTriePartitionsFlag,
 			utils.LevelDBCompressionTypeFlag,
 			utils.LevelDBNoBufferPoolFlag,
+			utils.DynamoDBTableNameFlag,
 			utils.NoParallelDBWriteFlag,
 			utils.SenderTxHashIndexingFlag,
 		},

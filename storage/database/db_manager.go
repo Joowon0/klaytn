@@ -323,6 +323,9 @@ type DBConfig struct {
 	LevelDBCacheSize   int // LevelDBCacheSize = BlockCacheCapacity + WriteBuffer
 	LevelDBCompression LevelDBCompressionType
 	LevelDBBufferPool  bool
+
+	// DynamoDB related configurations
+	DynamoDBTableName string
 }
 
 const dbMetricPrefix = "klay/db/chaindata/"
@@ -413,7 +416,7 @@ func newDatabase(dbc *DBConfig, entryType DBEntryType) (Database, error) {
 	case MemoryDB:
 		return NewMemDB(), nil
 	case DynamoDB:
-		return NewDynamoDB(createTestDynamoDBConfig())
+		return NewDynamoDB(createTestDynamoDBConfig(), dbc.DynamoDBTableName)
 	default:
 		logger.Info("database type is not set, fall back to default LevelDB")
 		return NewLevelDB(dbc, 0)
