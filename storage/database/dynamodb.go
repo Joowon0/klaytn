@@ -305,13 +305,14 @@ func (dynamo *dynamoDB) Close() {
 }
 
 func (dynamo *dynamoDB) NewBatch() Batch {
+	quitCh := make(chan struct{})
 	workerNum := runtime.NumCPU() / 2
 	writeCh := make(chan map[string]*dynamodb.AttributeValue, workerNum)
 	writeResultCh := make(chan error, workerNum)
 	for i := 0; i < workerNum; i++ {
-		go dynamoBatchWriteWorker(dynamo.db, aws.String(tableName), writeCh, writeResultCh)
+		go dynamoBatchWriteWorker(dynamo.db, aws.String(dynamo.config.TableName), quitCh, writeCh, writeResultCh)
 	}
-	dynamoBatch := &dynamoBatch{db: dynamo, tableName: dynamo.config.TableName, writeCh: writeCh, writeResultCh: writeResultCh}
+	dynamoBatch := &dynamoBatch{db: dynamo, tableName: dynamo.config.TableName, quitCh: quitCh, writeCh: writeCh, writeResultCh: writeResultCh}
 
 	return dynamoBatch
 }
@@ -337,6 +338,7 @@ type dynamoBatch struct {
 	batchItems         []map[string]*dynamodb.AttributeValue
 	oversizeBatchItems []item
 	size               int
+	quitCh             chan struct{}
 	writeCh            chan map[string]*dynamodb.AttributeValue
 	writeResultCh      chan error
 }
@@ -361,19 +363,25 @@ func (batch *dynamoBatch) Put(key, val []byte) error {
 	return nil
 }
 
-func dynamoBatchWriteWorker(db *dynamodb.DynamoDB, tableName *string, writeChan <-chan map[string]*dynamodb.AttributeValue, resultChan chan<- error) {
-	for item := range writeChan {
-		params := &dynamodb.PutItemInput{
-			TableName: tableName,
-			Item:      item,
-		}
+func dynamoBatchWriteWorker(db *dynamodb.DynamoDB, tableName *string, quitChan <-chan struct{}, writeChan <-chan map[string]*dynamodb.AttributeValue, resultChan chan<- error) {
+	for {
+		select {
+		case <-quitChan:
+			return
+		case item := <-writeChan:
+			{
+				params := &dynamodb.PutItemInput{
+					TableName: tableName,
+					Item:      item,
+				}
 
-		_, err := db.PutItem(params)
-		if err != nil {
-			resultChan <- err
+				_, err := db.PutItem(params)
+				if err != nil {
+					resultChan <- err
+				}
+				resultChan <- nil
+			}
 		}
-
-		resultChan <- nil
 	}
 }
 
@@ -382,11 +390,9 @@ func (batch *dynamoBatch) Write() error {
 	var errs []error
 	var overSizeErrChan chan error
 
-	go func() {
-		for _, item := range batch.batchItems {
-			batch.writeCh <- item
-		}
-	}()
+	for _, item := range batch.batchItems {
+		batch.writeCh <- item
+	}
 
 	go func(db *dynamoDB, overSizeErrChan chan error) {
 		for _, item := range batch.oversizeBatchItems {
@@ -426,6 +432,5 @@ func (batch *dynamoBatch) Reset() {
 }
 
 func (batch *dynamoBatch) Close() {
-	close(batch.writeCh)
-	close(batch.writeResultCh)
+	close(batch.quitCh)
 }
