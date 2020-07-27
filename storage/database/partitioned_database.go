@@ -319,3 +319,7 @@ func (pdbBatch *partitionedDBBatch) Reset() {
 		batch.Reset()
 	}
 }
+
+func (pdbBatch *partitionedDBBatch) Close() {
+
+}

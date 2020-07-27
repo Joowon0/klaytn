@@ -147,6 +147,7 @@ func senderTxHashIndexer(db database.DBManager, chainEvent <-chan blockchain.Cha
 		case event := <-chainEvent:
 			var err error
 			batch := db.NewSenderTxHashToTxHashBatch()
+			defer batch.Close()
 			for _, tx := range event.Block.Transactions() {
 				senderTxHash, ok := tx.SenderTxHash()
 

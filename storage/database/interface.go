@@ -80,6 +80,7 @@ type Batch interface {
 	Write() error
 	// Reset resets the batch for reuse
 	Reset()
+	Close()
 }
 
 func WriteBatches(batches ...Batch) (int, error) {

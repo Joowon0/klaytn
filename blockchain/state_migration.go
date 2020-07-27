@@ -133,6 +133,7 @@ func (bc *BlockChain) migrateState(rootHash common.Hash) (returnErr error) {
 	}
 
 	stateTrieBatch := dstState.TrieDB().DiskDB().NewBatch(database.StateTrieDB)
+	defer stateTrieBatch.Close()
 	stats := migrationStats{initialStartTime: start, startTime: mclock.Now()}
 
 	// Migration main loop

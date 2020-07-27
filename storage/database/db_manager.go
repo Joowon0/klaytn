@@ -542,6 +542,10 @@ func (stdBatch *stateTrieDBBatch) Reset() {
 	}
 }
 
+func (stdBatch *stateTrieDBBatch) Close() {
+
+}
+
 func (dbm *databaseManager) getDBDir(dbEntry DBEntryType) string {
 	miscDB := dbm.getDatabase(MiscDB)
 
@@ -1491,6 +1495,7 @@ func (dbm *databaseManager) ReadPreimageFromOld(hash common.Hash) []byte {
 // current block number, and is used for debug messages only.
 func (dbm *databaseManager) WritePreimages(number uint64, preimages map[common.Hash][]byte) {
 	batch := dbm.NewBatch(StateTrieDB)
+	defer batch.Close()
 	for hash, preimage := range preimages {
 		if err := batch.Put(preimageKey(hash), preimage); err != nil {
 			logger.Crit("Failed to store trie preimage", "err", err)
@@ -1528,6 +1533,7 @@ func (dbm *databaseManager) WriteTxLookupEntries(block *types.Block) {
 
 func (dbm *databaseManager) WriteAndCacheTxLookupEntries(block *types.Block) error {
 	batch := dbm.NewBatch(TxLookUpEntryDB)
+	defer batch.Close()
 	for i, tx := range block.Transactions() {
 		entry := TxLookupEntry{
 			BlockHash:  block.Hash(),

@@ -388,8 +388,8 @@ func (batch *dynamoBatch) Write() error {
 		}
 	}()
 
-	for _, item := range batch.oversizeBatchItems {
-		go func(db *dynamoDB, overSizeErrChan chan error) {
+	go func(db *dynamoDB, overSizeErrChan chan error) {
+		for _, item := range batch.oversizeBatchItems {
 			_, err := db.fdb.write(item)
 			if err == nil {
 				if err2 := db.Put(item.key, overSizedDataPrefix); err2 != nil {
@@ -400,8 +400,8 @@ func (batch *dynamoBatch) Write() error {
 			} else {
 				//overSizeErrChan <- errors.Wrap(err, "failed to put over size batch item in dynamo db")
 			}
-		}(batch.db, overSizeErrChan)
-	}
+		}
+	}(batch.db, overSizeErrChan)
 
 	for range batch.batchItems {
 		err := <-batch.writeResultCh
@@ -412,9 +412,6 @@ func (batch *dynamoBatch) Write() error {
 
 	//batch.db.logger.Info("write time", "elapsedTime", time.Since(start), "itemNum", len(batch.batchItems), "itemSize", batch.ValueSize())
 
-	close(batch.writeCh)
-	close(batch.writeResultCh)
-
 	return nil
 }
 
@@ -423,16 +420,12 @@ func (batch *dynamoBatch) ValueSize() int {
 }
 
 func (batch *dynamoBatch) Reset() {
-	workerNum := runtime.NumCPU() / 2
-	writeCh := make(chan map[string]*dynamodb.AttributeValue, workerNum)
-	writeResultCh := make(chan error, workerNum)
-	for i := 0; i < workerNum; i++ {
-		go dynamoBatchWriteWorker(batch.db.db, aws.String(tableName), writeCh, writeResultCh)
-	}
-
-	batch.writeCh = writeCh
-	batch.writeResultCh = writeResultCh
 	batch.batchItems = []map[string]*dynamodb.AttributeValue{}
 	batch.oversizeBatchItems = []item{}
 	batch.size = 0
+}
+
+func (batch *dynamoBatch) Close() {
+	close(batch.writeCh)
+	close(batch.writeResultCh)
 }

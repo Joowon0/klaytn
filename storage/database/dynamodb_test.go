@@ -34,17 +34,19 @@ func TestDynamoDB(t *testing.T) {
 
 func TestDynamoBatch(t *testing.T) {
 	dynamo, err := NewDynamoDB(createTestDynamoDBConfig())
-	t.Log("dynamoDB", dynamo.config.TableName)
 	defer dynamo.DeletedDB()
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Log("dynamoDB", dynamo.config.TableName)
 
 	var testKeys [][]byte
 	var testVals [][]byte
 	batch := dynamo.NewBatch()
+	defer batch.Close()
 
-	for i := 0; i < 10; i++ {
+	itemNum := 5
+	for i := 0; i < itemNum; i++ {
 		testKey := common.MakeRandomBytes(10)
 		testVal := common.MakeRandomBytes(50)
 
@@ -64,7 +66,7 @@ func TestDynamoBatch(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	// check if exist
-	for i := 0; i < 10; i++ {
+	for i := 0; i < itemNum; i++ {
 		returnedVal, returnedErr := dynamo.Get(testKeys[i])
 		assert.NoError(t, returnedErr)
 		assert.Equal(t, testVals[i], returnedVal)
