@@ -2,10 +2,13 @@ package database
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -17,6 +20,14 @@ import (
 var dataNotFoundErr = errors.New("data is not found with the given key")
 var nilDynamoConfigErr = errors.New("attempt to create DynamoDB with nil configuration")
 
+const dynamoReadSizeLimit = 400 * 1024
+const dynamoWriteSizeLimit = 100 * 1024
+
+const dynamoBatchWriteMaxCount = 5.0
+const commitResultChSizeLimit = 500
+
+var tableName = "dynamoDB" + strconv.Itoa(time.Now().Nanosecond())
+
 type DynamoDBConfig struct {
 	Region             string
 	Endpoint           string
@@ -24,9 +35,6 @@ type DynamoDBConfig struct {
 	ReadCapacityUnits  int64
 	WriteCapacityUnits int64
 }
-
-const dynamoReadSizeLimit = 400 * 1024
-const dynamoWriteSizeLimit = 100 * 1024
 
 /*
  * Please Run DynamoDB local with docker
@@ -37,7 +45,7 @@ func createTestDynamoDBConfig() *DynamoDBConfig {
 	return &DynamoDBConfig{
 		Region:             "ap-northeast-2",
 		Endpoint:           "https://dynamodb.ap-northeast-2.amazonaws.com", //"http://localhost:4569",  "https://dynamodb.ap-northeast-2.amazonaws.com"
-		TableName:          "winnie-test" + strconv.Itoa(time.Now().Nanosecond()),
+		TableName:          tableName,
 		ReadCapacityUnits:  100,
 		WriteCapacityUnits: 100,
 	}
@@ -93,6 +101,7 @@ func NewDynamoDB(config *DynamoDBConfig) (*dynamoDB, error) {
 
 		switch tableStatus {
 		case dynamodb.TableStatusActive:
+			dynamoDB.logger.Info("DynamoDB configurations")
 			return dynamoDB, nil
 		case dynamodb.TableStatusDeleting, dynamodb.TableStatusArchiving, dynamodb.TableStatusArchived:
 			return nil, errors.New("failed to get DynamoDB table, table status : " + tableStatus)
@@ -130,7 +139,6 @@ func (dynamo *dynamoDB) createTable() error {
 		//},
 		TableName: aws.String(dynamo.config.TableName),
 	}
-	dynamo.db.UpdateTable()
 
 	_, err := dynamo.db.CreateTable(input)
 	if err != nil {
@@ -297,7 +305,15 @@ func (dynamo *dynamoDB) Close() {
 }
 
 func (dynamo *dynamoDB) NewBatch() Batch {
-	return &dynamoBatch{db: dynamo, tableName: dynamo.config.TableName}
+	workerNum := runtime.NumCPU() / 2
+	writeCh := make(chan map[string]*dynamodb.AttributeValue, workerNum)
+	writeResultCh := make(chan error, workerNum)
+	for i := 0; i < workerNum; i++ {
+		go dynamoBatchWriteWorker(dynamo.db, aws.String(tableName), writeCh, writeResultCh)
+	}
+	dynamoBatch := &dynamoBatch{db: dynamo, tableName: dynamo.config.TableName, writeCh: writeCh, writeResultCh: writeResultCh}
+
+	return dynamoBatch
 }
 
 func (dynamo *dynamoDB) Meter(prefix string) {
@@ -321,6 +337,8 @@ type dynamoBatch struct {
 	batchItems         []map[string]*dynamodb.AttributeValue
 	oversizeBatchItems []item
 	size               int
+	writeCh            chan map[string]*dynamodb.AttributeValue
+	writeResultCh      chan error
 }
 
 func (batch *dynamoBatch) Put(key, val []byte) error {
@@ -343,25 +361,60 @@ func (batch *dynamoBatch) Put(key, val []byte) error {
 	return nil
 }
 
+func dynamoBatchWriteWorker(db *dynamodb.DynamoDB, tableName *string, writeChan <-chan map[string]*dynamodb.AttributeValue, resultChan chan<- error) {
+	for item := range writeChan {
+		params := &dynamodb.PutItemInput{
+			TableName: tableName,
+			Item:      item,
+		}
+
+		_, err := db.PutItem(params)
+		if err != nil {
+			resultChan <- err
+		}
+
+		resultChan <- nil
+	}
+}
+
 func (batch *dynamoBatch) Write() error {
 	//start := time.Now()
+	var errs []error
+	var overSizeErrChan chan error
 
-	for _, item := range batch.batchItems {
-		go func(db *dynamodb.DynamoDB, tableName *string, item map[string]*dynamodb.AttributeValue, logger log.Logger) {
-			params := &dynamodb.PutItemInput{
-				TableName: tableName,
-				Item:      item,
-			}
+	go func() {
+		for _, item := range batch.batchItems {
+			batch.writeCh <- item
+		}
+	}()
 
-			//marshalTime := time.Since(start)
-			_, err := db.PutItem(params)
-			if err != nil {
-				logger.Error("Failed to put item in DynamoDB")
+	for _, item := range batch.oversizeBatchItems {
+		go func(db *dynamoDB, overSizeErrChan chan error) {
+			_, err := db.fdb.write(item)
+			if err == nil {
+				if err2 := db.Put(item.key, overSizedDataPrefix); err2 != nil {
+					//overSizeErrChan <- errors.Wrap(err2, "failed to put over size batch item in dynamo db")
+				} else {
+					//overSizeErrChan <- nil
+				}
+			} else {
+				//overSizeErrChan <- errors.Wrap(err, "failed to put over size batch item in dynamo db")
 			}
-		}(batch.db.db, aws.String(batch.tableName), item, batch.db.logger)
+		}(batch.db, overSizeErrChan)
 	}
 
-	//logger.Info("batch write time 22222", "elapsedTime", time.Since(start))
+	for range batch.batchItems {
+		err := <-batch.writeResultCh
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	//batch.db.logger.Info("write time", "elapsedTime", time.Since(start), "itemNum", len(batch.batchItems), "itemSize", batch.ValueSize())
+
+	close(batch.writeCh)
+	close(batch.writeResultCh)
+
 	return nil
 }
 
@@ -370,7 +423,16 @@ func (batch *dynamoBatch) ValueSize() int {
 }
 
 func (batch *dynamoBatch) Reset() {
+	workerNum := runtime.NumCPU() / 2
+	writeCh := make(chan map[string]*dynamodb.AttributeValue, workerNum)
+	writeResultCh := make(chan error, workerNum)
+	for i := 0; i < workerNum; i++ {
+		go dynamoBatchWriteWorker(batch.db.db, aws.String(tableName), writeCh, writeResultCh)
+	}
+
+	batch.writeCh = writeCh
+	batch.writeResultCh = writeResultCh
 	batch.batchItems = []map[string]*dynamodb.AttributeValue{}
-	//batch.oversizeBatchItems = []item{}
+	batch.oversizeBatchItems = []item{}
 	batch.size = 0
 }
