@@ -54,6 +54,11 @@ type dynamoDB struct {
 	db     *dynamodb.DynamoDB
 	fdb    fileDB
 	logger log.Logger // Contextual logger tracking the database path
+
+	// worker pool
+	quitCh        chan struct{}
+	writeCh       chan map[string]*dynamodb.AttributeValue
+	writeResultCh chan error
 }
 
 func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
@@ -72,11 +77,21 @@ func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 		},
 	}))
 
+	workerNum := runtime.NumCPU()
+
 	db := dynamodb.New(session)
 	dynamoDB := &dynamoDB{
 		config: config,
 		db:     db,
-		logger: logger.NewWith("region", config.Region, "endPoint", config.Endpoint),
+		logger: logger.NewWith("region", config.Region, "endPoint", config.Endpoint, "tableName", config.TableName),
+
+		quitCh:        make(chan struct{}),
+		writeCh:       make(chan map[string]*dynamodb.AttributeValue, workerNum*2),
+		writeResultCh: make(chan error, workerNum*2),
+	}
+
+	for i := 0; i < workerNum; i++ {
+		go dynamoBatchWriteWorker(dynamoDB.db, aws.String(dynamoDB.config.TableName), dynamoDB.quitCh, dynamoDB.writeCh, dynamoDB.writeResultCh)
 	}
 
 	s3FileDB, err := newS3FileDB(config.Region, "https://s3.ap-northeast-2.amazonaws.com", config.TableName+"-bucket")
@@ -109,7 +124,7 @@ func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 			return nil, errors.New("failed to get DynamoDB table, table status : " + tableStatus)
 		default:
 			time.Sleep(1 * time.Second)
-			dynamoDB.logger.Info("waiting for the table to be ready", "table name", dynamoDB.config.TableName, "table status", tableStatus)
+			dynamoDB.logger.Info("waiting for the table to be ready", "table status", tableStatus)
 		}
 	}
 }
@@ -303,17 +318,11 @@ func (dynamo *dynamoDB) Delete(key []byte) error {
 }
 
 func (dynamo *dynamoDB) Close() {
+	close(dynamo.quitCh)
 }
 
 func (dynamo *dynamoDB) NewBatch() Batch {
-	quitCh := make(chan struct{})
-	workerNum := runtime.NumCPU() / 2
-	writeCh := make(chan map[string]*dynamodb.AttributeValue, workerNum)
-	writeResultCh := make(chan error, workerNum)
-	for i := 0; i < workerNum; i++ {
-		go dynamoBatchWriteWorker(dynamo.db, aws.String(dynamo.config.TableName), quitCh, writeCh, writeResultCh)
-	}
-	dynamoBatch := &dynamoBatch{db: dynamo, tableName: dynamo.config.TableName, quitCh: quitCh, writeCh: writeCh, writeResultCh: writeResultCh}
+	dynamoBatch := &dynamoBatch{db: dynamo, tableName: dynamo.config.TableName}
 
 	return dynamoBatch
 }
@@ -339,9 +348,6 @@ type dynamoBatch struct {
 	batchItems         []map[string]*dynamodb.AttributeValue
 	oversizeBatchItems []item
 	size               int
-	quitCh             chan struct{}
-	writeCh            chan map[string]*dynamodb.AttributeValue
-	writeResultCh      chan error
 }
 
 func (batch *dynamoBatch) Put(key, val []byte) error {
@@ -392,7 +398,7 @@ func (batch *dynamoBatch) Write() error {
 	var overSizeErrChan chan error
 
 	for _, item := range batch.batchItems {
-		batch.writeCh <- item
+		batch.db.writeCh <- item
 	}
 
 	go func(db *dynamoDB, overSizeErrChan chan error) {
@@ -411,7 +417,7 @@ func (batch *dynamoBatch) Write() error {
 	}(batch.db, overSizeErrChan)
 
 	for range batch.batchItems {
-		err := <-batch.writeResultCh
+		err := <-batch.db.writeResultCh
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -433,5 +439,5 @@ func (batch *dynamoBatch) Reset() {
 }
 
 func (batch *dynamoBatch) Close() {
-	close(batch.quitCh)
+	//close(batch.quitCh)
 }

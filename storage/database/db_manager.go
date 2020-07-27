@@ -384,12 +384,7 @@ func partitionedDatabaseDBManager(dbc *DBConfig) (*databaseManager, error) {
 		case StateTrieDB:
 			newDBC := getDBEntryConfig(dbc, entryType, dir)
 			newDBC.DBType = DynamoDB
-			newDBC.Partitioned = false
-			if dbc.NumStateTriePartitions > 1 {
-				db, err = newPartitionedDB(newDBC, entryType, dbc.NumStateTriePartitions)
-			} else {
-				db, err = newDatabase(newDBC, entryType)
-			}
+			db, err = newDatabase(newDBC, entryType)
 		default:
 			newDBC := getDBEntryConfig(dbc, entryType, dir)
 			newDBC.DBType = LevelDB
