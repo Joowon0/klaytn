@@ -43,7 +43,7 @@ func createTestDynamoDBConfig() *DynamoDBConfig {
 	return &DynamoDBConfig{
 		Region:             "ap-northeast-2",
 		Endpoint:           "https://dynamodb.ap-northeast-2.amazonaws.com", //"http://localhost:4569",  "https://dynamodb.ap-northeast-2.amazonaws.com"
-		TableName:          "dynamoDB-test" + strconv.Itoa(time.Now().Nanosecond()),
+		TableName:          "dynamo-test" + strconv.Itoa(time.Now().Nanosecond()),
 		ReadCapacityUnits:  100,
 		WriteCapacityUnits: 100,
 	}
