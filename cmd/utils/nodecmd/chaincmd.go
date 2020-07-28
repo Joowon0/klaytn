@@ -48,6 +48,7 @@ var (
 			utils.NoPartitionedDBFlag,
 			utils.NumStateTriePartitionsFlag,
 			utils.LevelDBCompressionTypeFlag,
+			utils.DynamoDBTableNameFlag,
 			utils.DataDirFlag,
 		},
 		Category: "BLOCKCHAIN COMMANDS",
@@ -132,10 +133,11 @@ func initGenesis(ctx *cli.Context) error {
 	parallelDBWrite := !ctx.GlobalIsSet(utils.NoParallelDBWriteFlag.Name)
 	partitioned := !ctx.GlobalIsSet(utils.NoPartitionedDBFlag.Name)
 	numStateTriePartitions := ctx.GlobalUint(utils.NumStateTriePartitionsFlag.Name)
+	DynamoDBTableName := ctx.GlobalString(utils.DynamoDBTableNameFlag.Name)
 	for _, name := range []string{"chaindata", "lightchaindata"} {
 		dbc := &database.DBConfig{Dir: name, DBType: database.LevelDB, ParallelDBWrite: parallelDBWrite,
 			Partitioned: partitioned, NumStateTriePartitions: numStateTriePartitions,
-			LevelDBCacheSize: 0, OpenFilesLimit: 0}
+			LevelDBCacheSize: 0, OpenFilesLimit: 0, DynamoDBTableName: DynamoDBTableName}
 		chaindb := stack.OpenDatabase(dbc)
 		// Initialize DeriveSha implementation
 		blockchain.InitDeriveSha(genesis.Config.DeriveShaImpl)
