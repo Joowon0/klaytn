@@ -8,6 +8,10 @@ import (
 	"strings"
 	"time"
 
+	metricutils "github.com/klaytn/klaytn/metrics/utils"
+
+	"github.com/rcrowley/go-metrics"
+
 	"github.com/pkg/errors"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -59,6 +63,12 @@ type dynamoDB struct {
 	quitCh        chan struct{}
 	writeCh       chan map[string]*dynamodb.AttributeValue
 	writeResultCh chan error
+
+	batchWriteTimeMeter       metrics.Meter
+	batchWriteCountMeter      metrics.Meter
+	batchWriteSizeMeter       metrics.Meter
+	batchWriteSecPerItemMeter metrics.Meter
+	batchWriteSecPerByteMeter metrics.Meter
 }
 
 func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
@@ -329,6 +339,11 @@ func (dynamo *dynamoDB) NewBatch() Batch {
 }
 
 func (dynamo *dynamoDB) Meter(prefix string) {
+	dynamo.batchWriteTimeMeter = metrics.NewRegisteredMeter(prefix+"batchWrite/time", nil)
+	dynamo.batchWriteCountMeter = metrics.NewRegisteredMeter(prefix+"batchWrite/count", nil)
+	dynamo.batchWriteSizeMeter = metrics.NewRegisteredMeter(prefix+"batchWrite/size", nil)
+	dynamo.batchWriteSecPerItemMeter = metrics.NewRegisteredMeter(prefix+"batchWrite/secPerItem", nil)
+	dynamo.batchWriteSecPerByteMeter = metrics.NewRegisteredMeter(prefix+"batchWrite/secPerByte", nil)
 }
 
 func (dynamo *dynamoDB) NewIterator() Iterator {
@@ -394,7 +409,7 @@ func dynamoBatchWriteWorker(db *dynamodb.DynamoDB, tableName *string, quitChan <
 }
 
 func (batch *dynamoBatch) Write() error {
-	//start := time.Now()
+	start := time.Now()
 	var errs []error
 	var overSizeErrChan chan error
 
@@ -424,8 +439,15 @@ func (batch *dynamoBatch) Write() error {
 		}
 	}
 
-	//batch.db.logger.Info("write time", "elapsedTime", time.Since(start), "itemNum", len(batch.batchItems), "itemSize", batch.ValueSize())
-
+	elapsed := time.Since(start)
+	batch.db.logger.Info("write time", "elapsedTime", elapsed, "itemNum", len(batch.batchItems), "itemSize", batch.ValueSize())
+	if metricutils.Enabled {
+		batch.db.batchWriteTimeMeter.Mark(int64(elapsed.Seconds()))
+		batch.db.batchWriteCountMeter.Mark(int64(len(batch.batchItems)))
+		batch.db.batchWriteSizeMeter.Mark(int64(batch.size))
+		batch.db.batchWriteSecPerItemMeter.Mark(int64(int(elapsed.Seconds()) / len(batch.batchItems)))
+		batch.db.batchWriteSecPerByteMeter.Mark(int64(int(elapsed.Seconds()) / batch.size))
+	}
 	return nil
 }
 
