@@ -90,10 +90,7 @@ func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 		writeResultCh: make(chan error, workerNum*2),
 	}
 
-	for i := 0; i < workerNum; i++ {
-		go dynamoBatchWriteWorker(dynamoDB.db, aws.String(dynamoDB.config.TableName), dynamoDB.quitCh, dynamoDB.writeCh, dynamoDB.writeResultCh)
-	}
-
+	logger.Info("creating s3FileDB ", config.TableName+"-bucket")
 	s3FileDB, err := newS3FileDB(config.Region, "https://s3.ap-northeast-2.amazonaws.com", config.TableName+"-bucket")
 	if err != nil {
 		dynamoDB.logger.Error("Unable to create/get S3FileDB", "DB", config.TableName+"-bucket")
@@ -119,6 +116,10 @@ func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 		switch tableStatus {
 		case dynamodb.TableStatusActive:
 			dynamoDB.logger.Info("DynamoDB configurations")
+			for i := 0; i < workerNum; i++ {
+				logger.Info("make a new dynamo batch write worker")
+				go dynamoBatchWriteWorker(dynamoDB.db, aws.String(dynamoDB.config.TableName), dynamoDB.quitCh, dynamoDB.writeCh, dynamoDB.writeResultCh)
+			}
 			return dynamoDB, nil
 		case dynamodb.TableStatusDeleting, dynamodb.TableStatusArchiving, dynamodb.TableStatusArchived:
 			return nil, errors.New("failed to get DynamoDB table, table status : " + tableStatus)
