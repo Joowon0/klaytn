@@ -339,11 +339,11 @@ func (dynamo *dynamoDB) NewBatch() Batch {
 }
 
 func (dynamo *dynamoDB) Meter(prefix string) {
-	dynamo.batchWriteTimeMeter = metrics.NewRegisteredMeter(prefix+"batchWrite/time", nil)
-	dynamo.batchWriteCountMeter = metrics.NewRegisteredMeter(prefix+"batchWrite/count", nil)
-	dynamo.batchWriteSizeMeter = metrics.NewRegisteredMeter(prefix+"batchWrite/size", nil)
-	dynamo.batchWriteSecPerItemMeter = metrics.NewRegisteredMeter(prefix+"batchWrite/secPerItem", nil)
-	dynamo.batchWriteSecPerByteMeter = metrics.NewRegisteredMeter(prefix+"batchWrite/secPerByte", nil)
+	dynamo.batchWriteTimeMeter = metrics.NewRegisteredMeter(prefix+"batchwrite/time", nil)
+	dynamo.batchWriteCountMeter = metrics.NewRegisteredMeter(prefix+"batchwrite/count", nil)
+	dynamo.batchWriteSizeMeter = metrics.NewRegisteredMeter(prefix+"batchwrite/size", nil)
+	dynamo.batchWriteSecPerItemMeter = metrics.NewRegisteredMeter(prefix+"batchwrite/secperitem", nil)
+	dynamo.batchWriteSecPerByteMeter = metrics.NewRegisteredMeter(prefix+"batchwrite/secperbyte", nil)
 }
 
 func (dynamo *dynamoDB) NewIterator() Iterator {
@@ -445,8 +445,12 @@ func (batch *dynamoBatch) Write() error {
 		batch.db.batchWriteTimeMeter.Mark(int64(elapsed.Seconds()))
 		batch.db.batchWriteCountMeter.Mark(int64(len(batch.batchItems)))
 		batch.db.batchWriteSizeMeter.Mark(int64(batch.size))
-		batch.db.batchWriteSecPerItemMeter.Mark(int64(int(elapsed.Seconds()) / len(batch.batchItems)))
-		batch.db.batchWriteSecPerByteMeter.Mark(int64(int(elapsed.Seconds()) / batch.size))
+		if len(batch.batchItems) != 0 {
+			batch.db.batchWriteSecPerItemMeter.Mark(int64(int(elapsed.Seconds()) / len(batch.batchItems)))
+		}
+		if batch.size != 0 {
+			batch.db.batchWriteSecPerByteMeter.Mark(int64(int(elapsed.Seconds()) / batch.size))
+		}
 	}
 	return nil
 }
