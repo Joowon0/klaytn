@@ -3,13 +3,11 @@ package database
 import (
 	"bytes"
 	"fmt"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	metricutils "github.com/klaytn/klaytn/metrics/utils"
-
 	"github.com/rcrowley/go-metrics"
 
 	"github.com/pkg/errors"
@@ -30,6 +28,15 @@ const dynamoWriteSizeLimit = 100 * 1024
 const dynamoBatchWriteMaxCount = 5.0
 const commitResultChSizeLimit = 500
 
+// dynamo table provisioned setting
+const ReadCapacityUnits = 10000
+const WriteCapacityUnits = 10000
+
+// batch write
+const WorkerNum = 200
+const itemChanSize = 500
+const itemResultChanSize = WorkerNum * 2
+
 type DynamoDBConfig struct {
 	Region             string
 	Endpoint           string
@@ -48,8 +55,8 @@ func createTestDynamoDBConfig() *DynamoDBConfig {
 		Region:             "ap-northeast-2",
 		Endpoint:           "https://dynamodb.ap-northeast-2.amazonaws.com", //"http://localhost:4569",  "https://dynamodb.ap-northeast-2.amazonaws.com"
 		TableName:          "dynamo-test" + strconv.Itoa(time.Now().Nanosecond()),
-		ReadCapacityUnits:  100,
-		WriteCapacityUnits: 100,
+		ReadCapacityUnits:  ReadCapacityUnits,
+		WriteCapacityUnits: WriteCapacityUnits,
 	}
 }
 
@@ -87,7 +94,7 @@ func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 		},
 	}))
 
-	workerNum := runtime.NumCPU()
+	workerNum := WorkerNum
 
 	db := dynamodb.New(session)
 	dynamoDB := &dynamoDB{
@@ -96,8 +103,8 @@ func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 		logger: logger.NewWith("region", config.Region, "endPoint", config.Endpoint, "tableName", config.TableName),
 
 		quitCh:        make(chan struct{}),
-		writeCh:       make(chan map[string]*dynamodb.AttributeValue, workerNum*2),
-		writeResultCh: make(chan error, workerNum*2),
+		writeCh:       make(chan map[string]*dynamodb.AttributeValue, itemChanSize),
+		writeResultCh: make(chan error, itemResultChanSize),
 	}
 
 	logger.Info("creating s3FileDB ", config.TableName+"-bucket")
@@ -142,7 +149,7 @@ func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 
 func (dynamo *dynamoDB) createTable() error {
 	input := &dynamodb.CreateTableInput{
-		BillingMode: aws.String("PAY_PER_REQUEST"),
+		BillingMode: aws.String("PROVISIONED"),
 		AttributeDefinitions: []*dynamodb.AttributeDefinition{
 			{
 				AttributeName: aws.String("Key"),
@@ -161,10 +168,10 @@ func (dynamo *dynamoDB) createTable() error {
 		},
 		// TODO change ProvisionedThroughput according to node status
 		//      check dynamodb.updateTable
-		//ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
-		//	ReadCapacityUnits:  aws.Int64(dynamo.config.ReadCapacityUnits),
-		//	WriteCapacityUnits: aws.Int64(dynamo.config.WriteCapacityUnits),
-		//},
+		ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+			ReadCapacityUnits:  aws.Int64(dynamo.config.ReadCapacityUnits),
+			WriteCapacityUnits: aws.Int64(dynamo.config.WriteCapacityUnits),
+		},
 		TableName: aws.String(dynamo.config.TableName),
 	}
 
@@ -436,8 +443,19 @@ func (batch *dynamoBatch) Write() error {
 		}
 	}(batch.db, overSizeErrChan)
 
+	i := 0
+	lastReport := time.Since(start)
+	writeItem := 0
+	reportInterval := 1000
 	for range batch.batchItems {
 		err := <-batch.db.writeResultCh
+		if i%reportInterval == 0 {
+			timeElapsed := time.Since(start) - lastReport
+			lastReport = time.Since(start)
+			writeItem += reportInterval
+			batch.db.logger.Debug("write time", "timeElapsed", timeElapsed, "writeItemAcc", writeItem, "writeItem", reportInterval)
+		}
+		i++
 		if err != nil {
 			errs = append(errs, err)
 		}
