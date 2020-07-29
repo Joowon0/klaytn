@@ -392,18 +392,20 @@ func dynamoBatchWriteWorker(db *dynamodb.DynamoDB, tableName *string, quitChan <
 		case <-quitChan:
 			return
 		case item := <-writeChan:
-			{
-				params := &dynamodb.PutItemInput{
-					TableName: tableName,
-					Item:      item,
-				}
 
-				_, err := db.PutItem(params)
-				if err != nil {
-					resultChan <- err
-				}
-				resultChan <- nil
+			params := &dynamodb.PutItemInput{
+				TableName: tableName,
+				Item:      item,
 			}
+
+			_, err := db.PutItem(params)
+			if err != nil {
+				fmt.Println(err.Error())
+				resultChan <- err
+				continue
+			}
+
+			resultChan <- nil
 		}
 	}
 }
@@ -413,9 +415,11 @@ func (batch *dynamoBatch) Write() error {
 	var errs []error
 	var overSizeErrChan chan error
 
-	for _, item := range batch.batchItems {
-		batch.db.writeCh <- item
-	}
+	go func() {
+		for _, item := range batch.batchItems {
+			batch.db.writeCh <- item
+		}
+	}()
 
 	go func(db *dynamoDB, overSizeErrChan chan error) {
 		for _, item := range batch.oversizeBatchItems {
