@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/client"
+
 	metricutils "github.com/klaytn/klaytn/metrics/utils"
 	"github.com/rcrowley/go-metrics"
 
@@ -91,6 +93,13 @@ func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 		Config: aws.Config{
 			Endpoint: aws.String(config.Endpoint),
 			Region:   aws.String(config.Region),
+			Retryer:  client.DefaultRetryer{
+				//NumMaxRetries:    10,
+				//MinRetryDelay:    client.DefaultRetryerMinRetryDelay,
+				//MinThrottleDelay: client.DefaultRetryerMinThrottleDelay,
+				//MaxRetryDelay:    10 * time.Second,
+				//MaxThrottleDelay: 30 * time.Second,
+			},
 		},
 	}))
 
@@ -284,7 +293,6 @@ func (dynamo *dynamoDB) PutStream(key []byte, val []byte, resultChan chan error)
 	}
 
 	dynamo.writeCh <- writeItems{marshaledData, resultChan}
-	return
 }
 
 // Has returns true if the corresponding value to the given key exists.
