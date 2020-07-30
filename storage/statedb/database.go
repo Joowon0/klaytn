@@ -875,6 +875,12 @@ func (db *Database) writeBatchNodes(node common.Hash) error {
 		return nil
 	}
 
+	enc := rootNode.rlp()
+	if err := db.diskDB.GetStateTrieDB().Put(node[:], enc); err != nil {
+		logger.Error("Failed to write trie to disk", "err", err)
+		return err
+	}
+
 	// To limit the size of commitResult channel, we use commitResultChSizeLimit here.
 	var resultCh chan commitResult
 	if len(db.nodes) > commitResultChSizeLimit {
@@ -887,8 +893,8 @@ func (db *Database) writeBatchNodes(node common.Hash) error {
 		go db.concurrentCommit(child, resultCh, i)
 	}
 
-	batch := db.diskDB.NewBatch(database.StateTrieDB)
-	defer batch.Close()
+	writeResultCh := make(chan error, numGoRoutines)
+	itemSize := 0
 	for numGoRoutines > 0 {
 		result := <-resultCh
 		if result.key == nil && result.val == nil {
@@ -896,25 +902,18 @@ func (db *Database) writeBatchNodes(node common.Hash) error {
 			continue
 		}
 
-		if err := batch.Put(result.key, result.val); err != nil {
-			return err
-		}
-		if batch.ValueSize() > database.IdealBatchSize {
-			if err := batch.Write(); err != nil {
-				return err
-			}
-			batch.Reset()
-		}
+		itemSize++
+		db.diskDB.GetStateTrieDB().PutStream(result.key, result.val, writeResultCh)
 	}
 
-	enc := rootNode.rlp()
-	if err := batch.Put(node[:], enc); err != nil {
+	var err error
+	for ; itemSize > 0; itemSize-- {
+		err = <-writeResultCh
+	}
+	if err != nil {
 		return err
 	}
-	if err := batch.Write(); err != nil {
-		logger.Error("Failed to write trie to disk", "err", err)
-		return err
-	}
+
 	if db.trieNodeCache != nil {
 		db.trieNodeCache.Set(node[:], enc)
 	}

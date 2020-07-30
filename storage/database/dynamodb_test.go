@@ -32,11 +32,46 @@ func TestDynamoDB(t *testing.T) {
 	//}
 }
 
-func TestDynamoBatch(t *testing.T) {
-	t.Log("Num go go routine b4", runtime.NumGoroutine())
+func TestDynamoDB_PutStream(t *testing.T) {
 	dynamo, err := NewDynamoDB(createTestDynamoDBConfig(), "winnie-test")
 	defer dynamo.DeletedDB()
 	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	itemNum := 100
+	writeResultCh := make(chan error, 1)
+	var testKeys [][]byte
+	var testVals [][]byte
+
+	for i := 0; i < itemNum; i++ {
+		testKey := common.MakeRandomBytes(10)
+		testVal := common.MakeRandomBytes(500)
+
+		testKeys = append(testKeys, testKey)
+		testVals = append(testVals, testVal)
+
+		val, err := dynamo.Get(testKey)
+		assert.Nil(t, val)
+		assert.Error(t, err)
+		assert.Equal(t, err.Error(), dataNotFoundErr.Error())
+
+		dynamo.PutStream(testKey, testVal, writeResultCh)
+	}
+
+	for i := 0; i < itemNum; i++ {
+		assert.NoError(t, <-writeResultCh)
+		returnedVal, returnedErr := dynamo.Get(testKeys[i])
+		assert.Equal(t, testVals[i], returnedVal)
+		assert.NoError(t, returnedErr)
+	}
+}
+
+func TestDynamoBatch(t *testing.T) {
+	dynamo, err := NewDynamoDB(createTestDynamoDBConfig(), "winnie-test-noworker")
+	defer dynamo.DeletedDB()
+	if err != nil {
+		t.Log(err.Error())
 		t.Fatal(err)
 	}
 	t.Log("dynamoDB", dynamo.config.TableName)
@@ -75,6 +110,7 @@ func TestDynamoBatch(t *testing.T) {
 }
 
 func (dynamo *dynamoDB) DeletedDB() {
+	dynamo.Close()
 	dynamo.deleteTable()
 	dynamo.fdb.deleteBucket()
 }

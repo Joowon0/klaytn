@@ -62,6 +62,7 @@ type Putter interface {
 // Database wraps all database operations. All methods are safe for concurrent use.
 type Database interface {
 	Putter
+	PutStream([]byte, []byte, chan error)
 	Get(key []byte) ([]byte, error)
 	Has(key []byte) (bool, error)
 	Delete(key []byte) error

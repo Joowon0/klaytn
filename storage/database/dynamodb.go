@@ -68,7 +68,7 @@ type dynamoDB struct {
 
 	// worker pool
 	quitCh        chan struct{}
-	writeCh       chan map[string]*dynamodb.AttributeValue
+	writeCh       chan writeItems
 	writeResultCh chan error
 
 	batchWriteTimeMeter       metrics.Meter
@@ -103,7 +103,7 @@ func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 		logger: logger.NewWith("region", config.Region, "endPoint", config.Endpoint, "tableName", config.TableName),
 
 		quitCh:        make(chan struct{}),
-		writeCh:       make(chan map[string]*dynamodb.AttributeValue, itemChanSize),
+		writeCh:       make(chan writeItems, itemChanSize),
 		writeResultCh: make(chan error, itemResultChanSize),
 	}
 
@@ -134,9 +134,9 @@ func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 		case dynamodb.TableStatusActive:
 			dynamoDB.logger.Info("DynamoDB configurations")
 			for i := 0; i < workerNum; i++ {
-				logger.Info("make a new dynamo batch write worker")
 				go dynamoBatchWriteWorker(dynamoDB.db, aws.String(dynamoDB.config.TableName), dynamoDB.quitCh, dynamoDB.writeCh, dynamoDB.writeResultCh)
 			}
+			logger.Info("made a new dynamo batch write worker", "workerNum", workerNum)
 			return dynamoDB, nil
 		case dynamodb.TableStatusDeleting, dynamodb.TableStatusArchiving, dynamodb.TableStatusArchived:
 			return nil, errors.New("failed to get DynamoDB table, table status : " + tableStatus)
@@ -260,6 +260,31 @@ func (dynamo *dynamoDB) Put(key []byte, val []byte) error {
 	}
 
 	return nil
+}
+
+func (dynamo *dynamoDB) PutStream(key []byte, val []byte, resultChan chan error) {
+	if len(val) > dynamoWriteSizeLimit {
+		go func(key []byte, val []byte, resultChan chan error) {
+			_, err := dynamo.fdb.write(item{key: key, val: val})
+			if err != nil {
+				resultChan <- err
+				return
+			}
+
+			resultChan <- dynamo.Put(key, overSizedDataPrefix)
+		}(key, val, resultChan)
+		return
+	}
+
+	data := DynamoData{Key: key, Val: val}
+	marshaledData, err := dynamodbattribute.MarshalMap(data)
+	if err != nil {
+		resultChan <- err
+		return
+	}
+
+	dynamo.writeCh <- writeItems{marshaledData, resultChan}
+	return
 }
 
 // Has returns true if the corresponding value to the given key exists.
@@ -393,26 +418,35 @@ func (batch *dynamoBatch) Put(key, val []byte) error {
 	return nil
 }
 
-func dynamoBatchWriteWorker(db *dynamodb.DynamoDB, tableName *string, quitChan <-chan struct{}, writeChan <-chan map[string]*dynamodb.AttributeValue, resultChan chan<- error) {
+type writeItems struct {
+	item       map[string]*dynamodb.AttributeValue
+	resultChan chan error
+}
+
+func dynamoBatchWriteWorker(db *dynamodb.DynamoDB, tableName *string, quitChan <-chan struct{}, writeChan <-chan writeItems, resultChan chan<- error) {
 	for {
 		select {
 		case <-quitChan:
 			return
-		case item := <-writeChan:
+		case writeItem := <-writeChan:
+			// if writeItem.resultChan is set, send result to that channel
+			thisResultChan := resultChan
+			if writeItem.resultChan != nil {
+				thisResultChan = writeItem.resultChan
+			}
 
 			params := &dynamodb.PutItemInput{
 				TableName: tableName,
-				Item:      item,
+				Item:      writeItem.item,
 			}
 
 			_, err := db.PutItem(params)
 			if err != nil {
-				fmt.Println(err.Error())
-				resultChan <- err
+				thisResultChan <- err
 				continue
 			}
 
-			resultChan <- nil
+			thisResultChan <- nil
 		}
 	}
 }
@@ -424,7 +458,7 @@ func (batch *dynamoBatch) Write() error {
 
 	go func() {
 		for _, item := range batch.batchItems {
-			batch.db.writeCh <- item
+			batch.db.writeCh <- writeItems{item, nil}
 		}
 	}()
 

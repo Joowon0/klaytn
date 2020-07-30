@@ -117,6 +117,10 @@ func (pdb *partitionedDB) Put(key []byte, value []byte) error {
 	}
 }
 
+func (pdb *partitionedDB) PutStream(key []byte, value []byte, resultChan chan error) {
+	resultChan <- pdb.Put(key, value)
+}
+
 func (pdb *partitionedDB) Get(key []byte) ([]byte, error) {
 	if partition, err := pdb.getPartition(key); err != nil {
 		return nil, err

@@ -241,6 +241,10 @@ func (db *levelDB) Put(key []byte, value []byte) error {
 	return db.db.Put(key, value, nil)
 }
 
+func (db *levelDB) PutStream(key []byte, value []byte, resultChan chan error) {
+	resultChan <- db.Put(key, value)
+}
+
 func (db *levelDB) Has(key []byte) (bool, error) {
 	return db.db.Has(key, nil)
 }

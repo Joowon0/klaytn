@@ -123,6 +123,10 @@ func (bg *badgerDB) Put(key []byte, value []byte) error {
 	return txn.Commit()
 }
 
+func (bg *badgerDB) PutStream(key []byte, value []byte, resultChan chan error) {
+	resultChan <- bg.Put(key, value)
+}
+
 // Has returns true if the corresponding value to the given key exists.
 func (bg *badgerDB) Has(key []byte) (bool, error) {
 	txn := bg.db.NewTransaction(false)

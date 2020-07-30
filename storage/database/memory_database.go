@@ -60,6 +60,10 @@ func (db *MemDB) Put(key []byte, value []byte) error {
 	return nil
 }
 
+func (db *MemDB) PutStream(key []byte, value []byte, resultChan chan error) {
+	resultChan <- db.Put(key, value)
+}
+
 func (db *MemDB) Has(key []byte) (bool, error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
