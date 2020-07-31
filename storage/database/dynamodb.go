@@ -100,14 +100,14 @@ func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 	dynamoDB := &dynamoDB{
 		config: config,
 		db:     db,
-		logger: logger.NewWith("region", config.Region, "endPoint", config.Endpoint, "tableName", config.TableName),
+		logger: logger.NewWith("region", config.Region, "tableName", config.TableName),
 
 		quitCh:        make(chan struct{}),
 		writeCh:       make(chan item, itemChanSize),
 		writeResultCh: make(chan error, itemResultChanSize),
 	}
 
-	logger.Info("creating s3FileDB ", config.TableName+"-bucket")
+	logger.Info("creating s3FileDB ", "bucket", config.TableName+"-bucket")
 	s3FileDB, err := newS3FileDB(config.Region, "https://s3.ap-northeast-2.amazonaws.com", config.TableName+"-bucket")
 	if err != nil {
 		dynamoDB.logger.Error("Unable to create/get S3FileDB", "DB", config.TableName+"-bucket")
@@ -132,7 +132,7 @@ func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 
 		switch tableStatus {
 		case dynamodb.TableStatusActive:
-			dynamoDB.logger.Info("DynamoDB configurations")
+			dynamoDB.logger.Info("DynamoDB configurations", "endPoint", config.Endpoint)
 			for i := 0; i < workerNum; i++ {
 				go dynamoBatchWriteWorker(dynamoDB, dynamoDB.quitCh, dynamoDB.writeCh, dynamoDB.writeResultCh)
 			}
