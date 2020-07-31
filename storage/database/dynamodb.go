@@ -300,7 +300,7 @@ func (dynamo *dynamoDB) Get(key []byte) ([]byte, error) {
 	}
 
 	if data.Val == nil {
-		return nil, dataNotFoundErr
+		return []byte{}, nil
 	}
 
 	if !bytes.Equal(data.Val, overSizedDataPrefix) {
