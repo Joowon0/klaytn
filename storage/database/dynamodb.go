@@ -68,7 +68,7 @@ type dynamoDB struct {
 
 	// worker pool
 	quitCh        chan struct{}
-	writeCh       chan map[string]*dynamodb.AttributeValue
+	writeCh       chan item
 	writeResultCh chan error
 
 	batchWriteTimeMeter       metrics.Meter
@@ -103,7 +103,7 @@ func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 		logger: logger.NewWith("region", config.Region, "endPoint", config.Endpoint, "tableName", config.TableName),
 
 		quitCh:        make(chan struct{}),
-		writeCh:       make(chan map[string]*dynamodb.AttributeValue, itemChanSize),
+		writeCh:       make(chan item, itemChanSize),
 		writeResultCh: make(chan error, itemResultChanSize),
 	}
 
@@ -134,9 +134,9 @@ func NewDynamoDB(config *DynamoDBConfig, tableName string) (*dynamoDB, error) {
 		case dynamodb.TableStatusActive:
 			dynamoDB.logger.Info("DynamoDB configurations")
 			for i := 0; i < workerNum; i++ {
-				logger.Info("make a new dynamo batch write worker")
-				go dynamoBatchWriteWorker(dynamoDB.db, aws.String(dynamoDB.config.TableName), dynamoDB.quitCh, dynamoDB.writeCh, dynamoDB.writeResultCh)
+				go dynamoBatchWriteWorker(dynamoDB, dynamoDB.quitCh, dynamoDB.writeCh, dynamoDB.writeResultCh)
 			}
+			logger.Info("made new dynamo batch write workers", "workerNum", workerNum)
 			return dynamoDB, nil
 		case dynamodb.TableStatusDeleting, dynamodb.TableStatusArchiving, dynamodb.TableStatusArchived:
 			return nil, errors.New("failed to get DynamoDB table, table status : " + tableStatus)
@@ -227,10 +227,9 @@ type DynamoData struct {
 
 // Put inserts the given key and value pair to the database.
 func (dynamo *dynamoDB) Put(key []byte, val []byte) error {
-	//start := time.Now()
-	//defer logger.Info("", "keySize", len(key), "valSize", len(val),
-	//	 "putElapsedTime", time.Since(start))
-	//return dynamo.internalBatch.Put(key, val)
+	if len(key) == 0 {
+		return nil
+	}
 
 	if len(val) > dynamoWriteSizeLimit {
 		_, err := dynamo.fdb.write(item{key: key, val: val})
@@ -274,10 +273,6 @@ var overSizedDataPrefix = []byte("oversizeditem")
 
 // Get returns the corresponding value to the given key if exists.
 func (dynamo *dynamoDB) Get(key []byte) ([]byte, error) {
-
-	//getStart := time.Now()
-	//defer func() {logger.Error("Get", "elapsed", time.Since(getStart))}()
-
 	params := &dynamodb.GetItemInput{
 		TableName: aws.String(dynamo.config.TableName),
 		Key: map[string]*dynamodb.AttributeValue{
@@ -340,7 +335,7 @@ func (dynamo *dynamoDB) Close() {
 }
 
 func (dynamo *dynamoDB) NewBatch() Batch {
-	dynamoBatch := &dynamoBatch{db: dynamo, tableName: dynamo.config.TableName}
+	dynamoBatch := &dynamoBatch{db: dynamo, tableName: dynamo.config.TableName, start: time.Now()}
 
 	return dynamoBatch
 }
@@ -366,113 +361,68 @@ func (dynamo *dynamoDB) NewIteratorWithPrefix(prefix []byte) Iterator {
 }
 
 type dynamoBatch struct {
-	db                 *dynamoDB
-	tableName          string
-	batchItems         []map[string]*dynamodb.AttributeValue
-	oversizeBatchItems []item
-	size               int
+	db        *dynamoDB
+	tableName string
+
+	count     int
+	size      int
+	leftCount int
+
+	start time.Time
 }
 
 func (batch *dynamoBatch) Put(key, val []byte) error {
-	// If the size of the item is larger than the limit, it should be handled in different way
-	if len(val) > dynamoWriteSizeLimit {
-		batch.oversizeBatchItems = append(batch.oversizeBatchItems, item{key: key, val: val})
-		batch.size += len(val)
+	if len(key) == 0 {
 		return nil
 	}
 
-	data := DynamoData{Key: key, Val: val}
-	marshaledData, err := dynamodbattribute.MarshalMap(data)
-	if err != nil {
-		logger.Error("err while batch put", "err", err, "len(val)", len(val))
-		return err
-	}
-
-	batch.batchItems = append(batch.batchItems, marshaledData)
+	batch.count++
 	batch.size += len(val)
+
+	go func() {
+		batch.db.writeCh <- item{key: key, val: val}
+	}()
+
 	return nil
 }
 
-func dynamoBatchWriteWorker(db *dynamodb.DynamoDB, tableName *string, quitChan <-chan struct{}, writeChan <-chan map[string]*dynamodb.AttributeValue, resultChan chan<- error) {
+func dynamoBatchWriteWorker(db *dynamoDB, quitChan <-chan struct{}, writeChan <-chan item, resultChan chan<- error) {
 	for {
 		select {
 		case <-quitChan:
 			return
 		case item := <-writeChan:
-
-			params := &dynamodb.PutItemInput{
-				TableName: tableName,
-				Item:      item,
-			}
-
-			_, err := db.PutItem(params)
-			if err != nil {
-				fmt.Println(err.Error())
-				resultChan <- err
-				continue
-			}
-
-			resultChan <- nil
+			resultChan <- db.Put(item.key, item.val)
 		}
 	}
 }
 
 func (batch *dynamoBatch) Write() error {
-	start := time.Now()
-	var errs []error
-	var overSizeErrChan chan error
+	if batch.count == 0 {
+		return nil
+	}
 
-	go func() {
-		for _, item := range batch.batchItems {
-			batch.db.writeCh <- item
-		}
-	}()
-
-	go func(db *dynamoDB, overSizeErrChan chan error) {
-		for _, item := range batch.oversizeBatchItems {
-			_, err := db.fdb.write(item)
-			if err == nil {
-				if err2 := db.Put(item.key, overSizedDataPrefix); err2 != nil {
-					//overSizeErrChan <- errors.Wrap(err2, "failed to put over size batch item in dynamo db")
-				} else {
-					//overSizeErrChan <- nil
-				}
-			} else {
-				//overSizeErrChan <- errors.Wrap(err, "failed to put over size batch item in dynamo db")
-			}
-		}
-	}(batch.db, overSizeErrChan)
-
-	i := 0
-	lastReport := time.Since(start)
-	writeItem := 0
-	reportInterval := 1000
-	for range batch.batchItems {
-		err := <-batch.db.writeResultCh
-		if i%reportInterval == 0 {
-			timeElapsed := time.Since(start) - lastReport
-			lastReport = time.Since(start)
-			writeItem += reportInterval
-			batch.db.logger.Debug("write time", "timeElapsed", timeElapsed, "writeItemAcc", writeItem, "writeItem", reportInterval)
-		}
-		i++
-		if err != nil {
-			errs = append(errs, err)
+	var err error
+	for i := 0; i < batch.count; i++ {
+		err2 := <-batch.db.writeResultCh
+		if err2 != nil {
+			err = err2
+			logger.Error("failed to batch put", "err", err2, "count", i)
 		}
 	}
 
-	elapsed := time.Since(start)
-	batch.db.logger.Info("write time", "elapsedTime", elapsed, "itemNum", len(batch.batchItems), "itemSize", batch.ValueSize())
+	elapsed := time.Since(batch.start)
+	batch.db.logger.Debug("write time", "elapsedTime", elapsed, "itemNum", (batch.count), "itemSize", batch.ValueSize())
 	if metricutils.Enabled {
 		batch.db.batchWriteTimeMeter.Mark(int64(elapsed.Seconds()))
-		batch.db.batchWriteCountMeter.Mark(int64(len(batch.batchItems)))
+		batch.db.batchWriteCountMeter.Mark(int64(batch.count))
 		batch.db.batchWriteSizeMeter.Mark(int64(batch.size))
-		if len(batch.batchItems) != 0 {
-			batch.db.batchWriteSecPerItemMeter.Mark(int64(int(elapsed.Seconds()) / len(batch.batchItems)))
-		}
-		if batch.size != 0 {
-			batch.db.batchWriteSecPerByteMeter.Mark(int64(int(elapsed.Seconds()) / batch.size))
-		}
+		batch.db.batchWriteSecPerItemMeter.Mark(int64(int(elapsed.Seconds()) / batch.count))
+		batch.db.batchWriteSecPerByteMeter.Mark(int64(int(elapsed.Seconds()) / batch.size))
+	}
+
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -482,11 +432,10 @@ func (batch *dynamoBatch) ValueSize() int {
 }
 
 func (batch *dynamoBatch) Reset() {
-	batch.batchItems = []map[string]*dynamodb.AttributeValue{}
-	batch.oversizeBatchItems = []item{}
 	batch.size = 0
+	batch.count = 0
+	batch.leftCount = 0
 }
 
 func (batch *dynamoBatch) Close() {
-	//close(batch.quitCh)
 }
