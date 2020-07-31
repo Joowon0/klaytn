@@ -33,7 +33,6 @@ func TestDynamoDB(t *testing.T) {
 }
 
 func TestDynamoBatch(t *testing.T) {
-	t.Log("Num go go routine b4", runtime.NumGoroutine())
 	dynamo, err := NewDynamoDB(createTestDynamoDBConfig(), "winnie-test")
 	defer dynamo.DeletedDB()
 	if err != nil {
@@ -74,7 +73,48 @@ func TestDynamoBatch(t *testing.T) {
 	}
 }
 
+func BenchmarkDynamoBatch_Write(b *testing.B) {
+	dynamo, err := NewDynamoDB(createTestDynamoDBConfig(), "winnie-test")
+	defer dynamo.DeletedDB()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Log("dynamoDB", dynamo.config.TableName)
+
+	var testKeys [][]byte
+	var testVals [][]byte
+	batch := dynamo.NewBatch()
+	defer batch.Close()
+
+	for j := 0; j < 100; j++ {
+		itemNum := 1000
+		for i := 0; i < itemNum; i++ {
+			testKey := common.MakeRandomBytes(256)
+			testVal := common.MakeRandomBytes(10)
+
+			testKeys = append(testKeys, testKey)
+
+			assert.NoError(b, batch.Put(testKey, testVal))
+		}
+
+		b.Log(batch.ValueSize() / 10)
+		assert.NoError(b, batch.Write())
+		time.Sleep(10 * time.Second)
+
+		batch.Reset()
+	}
+
+	b.Log("Finish write")
+	// check if exist
+	for i := 0; i < len(testKeys); i++ {
+		returnedVal, returnedErr := dynamo.Get(testKeys[i])
+		assert.NoError(b, returnedErr)
+		assert.Equal(b, testVals[i], returnedVal)
+	}
+}
+
 func (dynamo *dynamoDB) DeletedDB() {
+	dynamo.Close()
 	dynamo.deleteTable()
 	dynamo.fdb.deleteBucket()
 }
