@@ -69,7 +69,7 @@ type dynamoDB struct {
 	fdb    fileDB
 	logger log.Logger // Contextual logger tracking the database path
 
-	batchLock sync.RWMutex // lock for batch write (only one batch can write at a time)
+	batchWG sync.WaitGroup // wait group for batch write (a new batch can start only if the previous finishes)
 
 	// worker pool
 	quitCh        chan struct{}
@@ -340,7 +340,9 @@ func (dynamo *dynamoDB) Close() {
 }
 
 func (dynamo *dynamoDB) NewBatch() Batch {
-	dynamoBatch := &dynamoBatch{db: dynamo, tableName: dynamo.config.TableName, batchLock: dynamo.batchLock}
+	logger.Error("start waiting")
+	dynamo.batchWG.Wait()
+	dynamoBatch := &dynamoBatch{db: dynamo, tableName: dynamo.config.TableName}
 
 	return dynamoBatch
 }
@@ -371,9 +373,6 @@ type dynamoBatch struct {
 	batchItems         []*dynamodb.WriteRequest
 	oversizeBatchItems []item
 	size               int
-
-	batchLock sync.RWMutex // lock for batch write (only one batch can write at a time)
-	hasLock   bool
 }
 
 func (batch *dynamoBatch) Put(key, val []byte) error {
@@ -479,10 +478,9 @@ func (batch *dynamoBatch) Write() error {
 			}()
 		}
 
-		var err error
 		iterateNum := (len(batch.batchItems)-1)/25 + 1
 		for i := 0; i < iterateNum; i++ {
-			if err2 := <-batch.db.writeResultCh; err2 != nil {
+			if err := <-batch.db.writeResultCh; err != nil {
 				batch.db.logger.Error("Failed to write data to dynamodb", "err", err.Error())
 			}
 		}
@@ -516,7 +514,4 @@ func (batch *dynamoBatch) Reset() {
 }
 
 func (batch *dynamoBatch) Close() {
-	batch.db.logger.Error("release lock")
-	batch.batchLock.Unlock()
-	batch.hasLock = false
 }
