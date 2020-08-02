@@ -6,6 +6,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	metricutils "github.com/klaytn/klaytn/metrics/utils"
@@ -67,6 +68,8 @@ type dynamoDB struct {
 	db     *dynamodb.DynamoDB
 	fdb    fileDB
 	logger log.Logger // Contextual logger tracking the database path
+
+	batchLock sync.RWMutex // lock for batch write (only one batch can write at a time)
 
 	// worker pool
 	quitCh        chan struct{}
@@ -337,7 +340,7 @@ func (dynamo *dynamoDB) Close() {
 }
 
 func (dynamo *dynamoDB) NewBatch() Batch {
-	dynamoBatch := &dynamoBatch{db: dynamo, tableName: dynamo.config.TableName}
+	dynamoBatch := &dynamoBatch{db: dynamo, tableName: dynamo.config.TableName, batchLock: dynamo.batchLock}
 
 	return dynamoBatch
 }
@@ -368,6 +371,9 @@ type dynamoBatch struct {
 	batchItems         []*dynamodb.WriteRequest
 	oversizeBatchItems []item
 	size               int
+
+	batchLock sync.RWMutex // lock for batch write (only one batch can write at a time)
+	hasLock   bool
 }
 
 func (batch *dynamoBatch) Put(key, val []byte) error {
@@ -435,61 +441,66 @@ func (batch *dynamoBatch) Write() error {
 		return nil
 	}
 
-	start := time.Now()
-
-	go func(batchItems []*dynamodb.WriteRequest, writeCh chan map[string][]*dynamodb.WriteRequest, tableName string) {
-		writtenItems := 0
-		totalItems := len(batchItems)
-
-		for writtenItems < totalItems {
-			thisTime := int(math.Min(25.0, float64(totalItems-writtenItems)))
-			thisTimeItems := batchItems[writtenItems : writtenItems+thisTime]
-
-			writeCh <- map[string][]*dynamodb.WriteRequest{
-				tableName: thisTimeItems,
-			}
-
-			writtenItems += thisTime
+	go func() {
+		batch.db.logger.Error("try acquiring lock")
+		if !batch.hasLock {
+			batch.batchLock.Lock()
+			batch.hasLock = true
 		}
-	}(batch.batchItems, batch.db.writeCh, batch.tableName)
 
-	for _, item := range batch.oversizeBatchItems {
-		go func() {
-			_, err := batch.db.fdb.write(item)
-			if err == nil {
-				if err2 := batch.db.Put(item.key, overSizedDataPrefix); err2 != nil {
-					//errCh <- err2
+		batch.db.logger.Error("STart writing batch")
+
+		start := time.Now()
+		go func(batchItems []*dynamodb.WriteRequest, writeCh chan map[string][]*dynamodb.WriteRequest, tableName string) {
+			writtenItems := 0
+			totalItems := len(batchItems)
+
+			for writtenItems < totalItems {
+				thisTime := int(math.Min(25.0, float64(totalItems-writtenItems)))
+				thisTimeItems := batchItems[writtenItems : writtenItems+thisTime]
+
+				writeCh <- map[string][]*dynamodb.WriteRequest{
+					tableName: thisTimeItems,
 				}
+
+				writtenItems += thisTime
 			}
-			//errCh <- err
-		}()
-	}
+		}(batch.batchItems, batch.db.writeCh, batch.tableName)
 
-	var err error
-	iterateNum := (len(batch.batchItems)-1)/25 + 1
-	for i := 0; i < iterateNum; i++ {
-		if err2 := <-batch.db.writeResultCh; err2 != nil {
-			err = err2
+		for _, item := range batch.oversizeBatchItems {
+			go func() {
+				_, err := batch.db.fdb.write(item)
+				if err == nil {
+					if err2 := batch.db.Put(item.key, overSizedDataPrefix); err2 != nil {
+						//errCh <- err2
+					}
+				}
+				//errCh <- err
+			}()
 		}
-	}
 
-	elapsed := time.Since(start)
-	batch.db.logger.Debug("write time", "elapsedTime", elapsed, "itemNum", len(batch.batchItems), "itemSize", batch.ValueSize())
-	if metricutils.Enabled {
-		batch.db.batchWriteTimeMeter.Mark(int64(elapsed.Seconds()))
-		batch.db.batchWriteCountMeter.Mark(int64(len(batch.batchItems)))
-		batch.db.batchWriteSizeMeter.Mark(int64(batch.size))
-		if len(batch.batchItems) != 0 {
-			batch.db.batchWriteSecPerItemMeter.Mark(int64(int(elapsed.Seconds()) / len(batch.batchItems)))
+		var err error
+		iterateNum := (len(batch.batchItems)-1)/25 + 1
+		for i := 0; i < iterateNum; i++ {
+			if err2 := <-batch.db.writeResultCh; err2 != nil {
+				batch.db.logger.Error("Failed to write data to dynamodb", "err", err.Error())
+			}
 		}
-		if batch.size != 0 {
-			batch.db.batchWriteSecPerByteMeter.Mark(int64(int(elapsed.Seconds()) / batch.size))
-		}
-	}
 
-	if err != nil {
-		return err
-	}
+		elapsed := time.Since(start)
+		batch.db.logger.Debug("write time", "elapsedTime", elapsed, "itemNum", len(batch.batchItems), "itemSize", batch.ValueSize())
+		if metricutils.Enabled {
+			batch.db.batchWriteTimeMeter.Mark(int64(elapsed.Seconds()))
+			batch.db.batchWriteCountMeter.Mark(int64(len(batch.batchItems)))
+			batch.db.batchWriteSizeMeter.Mark(int64(batch.size))
+			if len(batch.batchItems) != 0 {
+				batch.db.batchWriteSecPerItemMeter.Mark(int64(int(elapsed.Seconds()) / len(batch.batchItems)))
+			}
+			if batch.size != 0 {
+				batch.db.batchWriteSecPerByteMeter.Mark(int64(int(elapsed.Seconds()) / batch.size))
+			}
+		}
+	}()
 
 	return nil
 }
@@ -505,4 +516,7 @@ func (batch *dynamoBatch) Reset() {
 }
 
 func (batch *dynamoBatch) Close() {
+	batch.db.logger.Error("release lock")
+	batch.batchLock.Unlock()
+	batch.hasLock = false
 }
