@@ -402,7 +402,6 @@ func dynamoBatchWriteWorker(db *dynamodb.DynamoDB, quitChan <-chan struct{}, wri
 		case <-quitChan:
 			return
 		case batch := <-writeChan:
-			logger.Info("Got input")
 			BatchWriteItemOutput, err := db.BatchWriteItem(&dynamodb.BatchWriteItemInput{
 				RequestItems:                batch,
 				ReturnConsumedCapacity:      nil,
@@ -418,16 +417,13 @@ func dynamoBatchWriteWorker(db *dynamodb.DynamoDB, quitChan <-chan struct{}, wri
 					resultChan <- err
 					continue
 				}
-				logger.Error("Failed to batch write items", "err", err.Error())
 			}
 
 			if len(BatchWriteItemOutput.UnprocessedItems) != 0 {
 				// retry
-				logger.Error("failed to batch write, retrying")
 				writeChan <- BatchWriteItemOutput.UnprocessedItems
 			} else {
-				// success in writing all batch files
-				logger.Error("Success in batch write")
+				// success in writing batch file
 				resultChan <- nil
 			}
 		}
@@ -447,7 +443,6 @@ func (batch *dynamoBatch) Write() error {
 
 		for writtenItems < totalItems {
 			thisTime := int(math.Min(25.0, float64(totalItems-writtenItems)))
-			logger.Error("batch write time", "total", len(batchItems), "start", writtenItems, "end", writtenItems+thisTime, "thisTime", thisTime, "total2", totalItems)
 			thisTimeItems := batchItems[writtenItems : writtenItems+thisTime]
 
 			writeCh <- map[string][]*dynamodb.WriteRequest{
@@ -471,16 +466,15 @@ func (batch *dynamoBatch) Write() error {
 	}
 
 	var err error
-	logger.Error("start waiting result")
-	for i := 0; i < len(batch.batchItems)/25+1; i++ {
+	iterateNum := (len(batch.batchItems)-1)/25 + 1
+	for i := 0; i < iterateNum; i++ {
 		if err2 := <-batch.db.writeResultCh; err2 != nil {
 			err = err2
 		}
-		logger.Error("receive result")
 	}
 
 	elapsed := time.Since(start)
-	batch.db.logger.Info("write time", "elapsedTime", elapsed, "itemNum", len(batch.batchItems), "itemSize", batch.ValueSize())
+	batch.db.logger.Debug("write time", "elapsedTime", elapsed, "itemNum", len(batch.batchItems), "itemSize", batch.ValueSize())
 	if metricutils.Enabled {
 		batch.db.batchWriteTimeMeter.Mark(int64(elapsed.Seconds()))
 		batch.db.batchWriteCountMeter.Mark(int64(len(batch.batchItems)))
