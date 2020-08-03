@@ -20,7 +20,6 @@ import (
 	"crypto/ecdsa"
 	"github.com/klaytn/klaytn/blockchain/types"
 	"github.com/klaytn/klaytn/common"
-	"github.com/klaytn/klaytn/crypto"
 	"github.com/klaytn/klaytn/params"
 	"github.com/klaytn/klaytn/ser/rlp"
 	"github.com/stretchr/testify/assert"
@@ -60,24 +59,24 @@ var key *ecdsa.PrivateKey
 var addr common.Address
 var signer types.EIP155Signer
 
-func init() {
-	key, _ = crypto.GenerateKey()
-	addr = crypto.PubkeyToAddress(key.PublicKey)
-	signer = types.NewEIP155Signer(big.NewInt(18))
-
-	for _, bc := range baseConfigs {
-		badgerConfig := *bc
-		badgerConfig.DBType = BadgerDB
-		memoryConfig := *bc
-		memoryConfig.DBType = MemoryDB
-
-		dbConfigs = append(dbConfigs, bc)
-		dbConfigs = append(dbConfigs, &badgerConfig)
-		dbConfigs = append(dbConfigs, &memoryConfig)
-	}
-
-	dbManagers = createDBManagers(dbConfigs)
-}
+// func init() {
+// 	key, _ = crypto.GenerateKey()
+// 	addr = crypto.PubkeyToAddress(key.PublicKey)
+// 	signer = types.NewEIP155Signer(big.NewInt(18))
+//
+// 	for _, bc := range baseConfigs {
+// 		badgerConfig := *bc
+// 		badgerConfig.DBType = BadgerDB
+// 		memoryConfig := *bc
+// 		memoryConfig.DBType = MemoryDB
+//
+// 		dbConfigs = append(dbConfigs, bc)
+// 		dbConfigs = append(dbConfigs, &badgerConfig)
+// 		dbConfigs = append(dbConfigs, &memoryConfig)
+// 	}
+//
+// 	dbManagers = createDBManagers(dbConfigs)
+// }
 
 // createDBManagers generates a list of DBManagers to test various combinations of DBConfig.
 func createDBManagers(configs []*DBConfig) []DBManager {

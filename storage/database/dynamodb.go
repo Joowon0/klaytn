@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 	"time"
 
-	metricutils "github.com/klaytn/klaytn/metrics/utils"
+	"github.com/klaytn/klaytn/metrics/utils"
 
 	"github.com/rcrowley/go-metrics"
 
@@ -56,7 +55,7 @@ func createTestDynamoDBConfig() *DynamoDBConfig {
 	return &DynamoDBConfig{
 		Region:             "ap-northeast-2",
 		Endpoint:           "https://dynamodb.ap-northeast-2.amazonaws.com", //"http://localhost:4569",  "https://dynamodb.ap-northeast-2.amazonaws.com"
-		TableName:          "dynamo-test" + strconv.Itoa(time.Now().Nanosecond()),
+		TableName:          "dynamo-test",
 		ReadCapacityUnits:  ReadCapacityUnits,
 		WriteCapacityUnits: WriteCapacityUnits,
 	}
@@ -400,6 +399,7 @@ func dynamoBatchWriteWorker(db *dynamodb.DynamoDB, quitChan <-chan struct{}, wri
 	for {
 		select {
 		case <-quitChan:
+			logger.Info("close an worker", "time", time.Now())
 			return
 		case batch := <-writeChan:
 			BatchWriteItemOutput, err := db.BatchWriteItem(&dynamodb.BatchWriteItemInput{
