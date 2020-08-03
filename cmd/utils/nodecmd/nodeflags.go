@@ -54,6 +54,7 @@ var CommonNodeFlags = []cli.Flag{
 	utils.LevelDBCompressionTypeFlag,
 	utils.LevelDBNoBufferPoolFlag,
 	utils.LevelDBCacheSizeFlag,
+	utils.DynamoDBTableNameFlag,
 	utils.NoParallelDBWriteFlag,
 	utils.SenderTxHashIndexingFlag,
 	utils.TrieMemoryCacheSizeFlag,

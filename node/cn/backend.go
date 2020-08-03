@@ -147,6 +147,7 @@ func senderTxHashIndexer(db database.DBManager, chainEvent <-chan blockchain.Cha
 		case event := <-chainEvent:
 			var err error
 			batch := db.NewSenderTxHashToTxHashBatch()
+			defer batch.Close()
 			for _, tx := range event.Block.Transactions() {
 				senderTxHash, ok := tx.SenderTxHash()
 
@@ -408,7 +409,7 @@ func makeExtraData(extra []byte) []byte {
 func CreateDB(ctx *node.ServiceContext, config *Config, name string) database.DBManager {
 	dbc := &database.DBConfig{Dir: name, DBType: database.LevelDB, ParallelDBWrite: config.ParallelDBWrite, Partitioned: config.PartitionedDB, NumStateTriePartitions: config.NumStateTriePartitions,
 		LevelDBCacheSize: config.LevelDBCacheSize, OpenFilesLimit: database.GetOpenFilesLimit(), LevelDBCompression: config.LevelDBCompression,
-		LevelDBBufferPool: config.LevelDBBufferPool}
+		LevelDBBufferPool: config.LevelDBBufferPool, DynamoDBTableName: config.DynamoDBTableName}
 	return ctx.OpenDatabase(dbc)
 }
 

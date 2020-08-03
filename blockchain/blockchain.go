@@ -968,6 +968,11 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 		receiptsBatch        = bc.db.NewBatch(database.ReceiptsDB)
 		txLookupEntriesBatch = bc.db.NewBatch(database.TxLookUpEntryDB)
 	)
+	defer func() {
+		bodyBatch.Close()
+		receiptsBatch.Close()
+		txLookupEntriesBatch.Close()
+	}()
 	for i, block := range blockChain {
 		receipts := receiptChain[i]
 		// Short circuit insertion if shutting down or processing failed

@@ -210,6 +210,10 @@ var (
 		Name:  "db.leveldb.no-buffer-pool",
 		Usage: "Disables using buffer pool for LevelDB's block allocation",
 	}
+	DynamoDBTableNameFlag = cli.StringFlag{
+		Name:  "db.dynamodb.table-name",
+		Usage: "Specify table name for dynamoDB",
+	}
 	NoParallelDBWriteFlag = cli.BoolFlag{
 		Name:  "db.no-parallel-write",
 		Usage: "Disables parallel writes of block data to persistent database",
@@ -1137,6 +1141,7 @@ func SetKlayConfig(ctx *cli.Context, stack *node.Node, cfg *cn.Config) {
 	cfg.LevelDBCompression = database.LevelDBCompressionType(ctx.GlobalInt(LevelDBCompressionTypeFlag.Name))
 	cfg.LevelDBBufferPool = !ctx.GlobalIsSet(LevelDBNoBufferPoolFlag.Name)
 	cfg.LevelDBCacheSize = ctx.GlobalInt(LevelDBCacheSizeFlag.Name)
+	cfg.DynamoDBTableName = ctx.GlobalString(DynamoDBTableNameFlag.Name)
 
 	if gcmode := ctx.GlobalString(GCModeFlag.Name); gcmode != "full" && gcmode != "archive" {
 		log.Fatalf("--%s must be either 'full' or 'archive'", GCModeFlag.Name)

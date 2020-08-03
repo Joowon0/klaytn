@@ -22,6 +22,10 @@ package statedb
 
 import (
 	"fmt"
+	"io"
+	"sync"
+	"time"
+
 	"github.com/VictoriaMetrics/fastcache"
 	"github.com/klaytn/klaytn/common"
 	"github.com/klaytn/klaytn/log"
@@ -29,9 +33,6 @@ import (
 	"github.com/klaytn/klaytn/storage/database"
 	"github.com/pbnjay/memory"
 	"github.com/rcrowley/go-metrics"
-	"io"
-	"sync"
-	"time"
 )
 
 var (
@@ -771,6 +772,7 @@ func (db *Database) Cap(limit common.StorageSize) error {
 	// Keep committing nodes from the flush-list until we're below allowance
 	oldest := db.oldest
 	batch := db.diskDB.NewBatch(database.StateTrieDB)
+	defer batch.Close()
 	for size > limit && oldest != (common.Hash{}) {
 		// Fetch the oldest referenced node and push into the batch
 		node := db.nodes[oldest]
@@ -836,6 +838,7 @@ func (db *Database) Cap(limit common.StorageSize) error {
 func (db *Database) writeBatchPreimages() error {
 	// TODO-Klaytn What kind of batch should be used below?
 	preimagesBatch := db.diskDB.NewBatch(database.StateTrieDB)
+	defer preimagesBatch.Close()
 
 	// Move all of the accumulated preimages into a write batch
 	for hash, preimage := range db.preimages {
@@ -885,6 +888,7 @@ func (db *Database) writeBatchNodes(node common.Hash) error {
 	}
 
 	batch := db.diskDB.NewBatch(database.StateTrieDB)
+	defer batch.Close()
 	for numGoRoutines > 0 {
 		result := <-resultCh
 		if result.key == nil && result.val == nil {

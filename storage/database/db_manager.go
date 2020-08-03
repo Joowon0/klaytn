@@ -20,17 +20,18 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"math/big"
+	"os"
+	"path/filepath"
+	"strconv"
+	"sync"
+
 	"github.com/klaytn/klaytn/blockchain/types"
 	"github.com/klaytn/klaytn/common"
 	"github.com/klaytn/klaytn/log"
 	"github.com/klaytn/klaytn/params"
 	"github.com/klaytn/klaytn/ser/rlp"
 	"github.com/pkg/errors"
-	"math/big"
-	"os"
-	"path/filepath"
-	"strconv"
-	"sync"
 )
 
 var logger = log.NewModuleLogger(log.StorageDatabase)
@@ -322,6 +323,9 @@ type DBConfig struct {
 	LevelDBCacheSize   int // LevelDBCacheSize = BlockCacheCapacity + WriteBuffer
 	LevelDBCompression LevelDBCompressionType
 	LevelDBBufferPool  bool
+
+	// DynamoDB related configurations
+	DynamoDBTableName string
 }
 
 const dbMetricPrefix = "klay/db/chaindata/"
@@ -379,13 +383,11 @@ func partitionedDatabaseDBManager(dbc *DBConfig) (*databaseManager, error) {
 			fallthrough
 		case StateTrieDB:
 			newDBC := getDBEntryConfig(dbc, entryType, dir)
-			if dbc.NumStateTriePartitions > 1 {
-				db, err = newPartitionedDB(newDBC, entryType, dbc.NumStateTriePartitions)
-			} else {
-				db, err = newDatabase(newDBC, entryType)
-			}
+			newDBC.DBType = DynamoDB
+			db, err = newDatabase(newDBC, entryType)
 		default:
 			newDBC := getDBEntryConfig(dbc, entryType, dir)
+			newDBC.DBType = LevelDB
 			db, err = newDatabase(newDBC, entryType)
 		}
 
@@ -408,6 +410,8 @@ func newDatabase(dbc *DBConfig, entryType DBEntryType) (Database, error) {
 		return NewBadgerDB(dbc.Dir)
 	case MemoryDB:
 		return NewMemDB(), nil
+	case DynamoDB:
+		return NewDynamoDB(createTestDynamoDBConfig(), dbc.DynamoDBTableName)
 	default:
 		logger.Info("database type is not set, fall back to default LevelDB")
 		return NewLevelDB(dbc, 0)
@@ -534,6 +538,10 @@ func (stdBatch *stateTrieDBBatch) Reset() {
 	for _, batch := range stdBatch.batches {
 		batch.Reset()
 	}
+}
+
+func (stdBatch *stateTrieDBBatch) Close() {
+
 }
 
 func (dbm *databaseManager) getDBDir(dbEntry DBEntryType) string {
@@ -1485,6 +1493,7 @@ func (dbm *databaseManager) ReadPreimageFromOld(hash common.Hash) []byte {
 // current block number, and is used for debug messages only.
 func (dbm *databaseManager) WritePreimages(number uint64, preimages map[common.Hash][]byte) {
 	batch := dbm.NewBatch(StateTrieDB)
+	defer batch.Close()
 	for hash, preimage := range preimages {
 		if err := batch.Put(preimageKey(hash), preimage); err != nil {
 			logger.Crit("Failed to store trie preimage", "err", err)
@@ -1522,6 +1531,7 @@ func (dbm *databaseManager) WriteTxLookupEntries(block *types.Block) {
 
 func (dbm *databaseManager) WriteAndCacheTxLookupEntries(block *types.Block) error {
 	batch := dbm.NewBatch(TxLookUpEntryDB)
+	defer batch.Close()
 	for i, tx := range block.Transactions() {
 		entry := TxLookupEntry{
 			BlockHash:  block.Hash(),

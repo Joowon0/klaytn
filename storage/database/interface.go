@@ -31,6 +31,7 @@ const (
 	BadgerDB
 	MemoryDB
 	PartitionedDB
+	DynamoDB
 )
 
 func (dbType DBType) String() string {
@@ -43,6 +44,8 @@ func (dbType DBType) String() string {
 		return "MemoryDB"
 	case PartitionedDB:
 		return "PartitionedDB"
+	case DynamoDB:
+		return "DynamoDB"
 	default:
 		logger.Error("Undefined DBType entered.", "entered DBType", dbType)
 		return "undefined"
@@ -77,6 +80,7 @@ type Batch interface {
 	Write() error
 	// Reset resets the batch for reuse
 	Reset()
+	Close()
 }
 
 func WriteBatches(batches ...Batch) (int, error) {

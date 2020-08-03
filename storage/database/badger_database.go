@@ -227,3 +227,7 @@ func (b *badgerBatch) Reset() {
 	b.txn = b.db.NewTransaction(true)
 	b.size = 0
 }
+
+func (b *badgerBatch) Close() {
+
+}
