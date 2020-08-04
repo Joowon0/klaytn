@@ -68,7 +68,7 @@ func TestDynamoBatch(t *testing.T) {
 	// var testKeys [][]byte
 	// var testVals [][]byte
 
-	itemNum := 10000 * 60
+	itemNum := 10000 * 120
 
 	// testKeys := make([][]byte, itemNum)
 	// testVals := make([][]byte, itemNum)
@@ -81,8 +81,8 @@ func TestDynamoBatch(t *testing.T) {
 		if i%10000 == 0 {
 			t.Log(i, time.Since(start))
 		}
-		testKey := common.MakeRandomBytes(10)
-		testVal := common.MakeRandomBytes(50)
+		testKey := common.MakeRandomBytes(32)
+		testVal := common.MakeRandomBytes(500)
 
 		// testKey := common.MakeRandomBytes(10)
 		// testVal := common.MakeRandomBytes(50)

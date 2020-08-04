@@ -7,8 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/klaytn/klaytn/metrics/utils"
-
 	"github.com/rcrowley/go-metrics"
 
 	"github.com/pkg/errors"
@@ -34,7 +32,7 @@ const ReadCapacityUnits = 10000
 const WriteCapacityUnits = 10000
 
 // batch write
-const WorkerNum = 200
+const WorkerNum = 20
 const itemChanSize = 500
 const itemResultChanSize = WorkerNum * 2
 
@@ -475,17 +473,17 @@ func (batch *dynamoBatch) Write() error {
 
 	elapsed := time.Since(start)
 	batch.db.logger.Debug("write time", "elapsedTime", elapsed, "itemNum", len(batch.batchItems), "itemSize", batch.ValueSize())
-	if metricutils.Enabled {
-		batch.db.batchWriteTimeMeter.Mark(int64(elapsed.Seconds()))
-		batch.db.batchWriteCountMeter.Mark(int64(len(batch.batchItems)))
-		batch.db.batchWriteSizeMeter.Mark(int64(batch.size))
-		if len(batch.batchItems) != 0 {
-			batch.db.batchWriteSecPerItemMeter.Mark(int64(int(elapsed.Seconds()) / len(batch.batchItems)))
-		}
-		if batch.size != 0 {
-			batch.db.batchWriteSecPerByteMeter.Mark(int64(int(elapsed.Seconds()) / batch.size))
-		}
-	}
+	// if metricutils.Enabled {
+	// 	batch.db.batchWriteTimeMeter.Mark(int64(elapsed.Seconds()))
+	// 	batch.db.batchWriteCountMeter.Mark(int64(len(batch.batchItems)))
+	// 	batch.db.batchWriteSizeMeter.Mark(int64(batch.size))
+	// 	if len(batch.batchItems) != 0 {
+	// 		batch.db.batchWriteSecPerItemMeter.Mark(int64(int(elapsed.Seconds()) / len(batch.batchItems)))
+	// 	}
+	// 	if batch.size != 0 {
+	// 		batch.db.batchWriteSecPerByteMeter.Mark(int64(int(elapsed.Seconds()) / batch.size))
+	// 	}
+	// }
 
 	if err != nil {
 		return err
