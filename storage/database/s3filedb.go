@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
+
 	"github.com/klaytn/klaytn/common/hexutil"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -65,6 +67,9 @@ func newS3FileDB(region, endpoint, bucketName string) (*s3FileDB, error) {
 func (s3DB *s3FileDB) hasBucket(bucketName string) (bool, error) {
 	output, err := s3DB.s3.ListBuckets(&s3.ListBucketsInput{})
 	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			s3DB.logger.Error(aerr.Code() + aerr.Message())
+		}
 		return false, err
 	}
 
