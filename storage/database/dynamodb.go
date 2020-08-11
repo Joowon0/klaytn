@@ -53,7 +53,7 @@ func createTestDynamoDBConfig() *DynamoDBConfig {
 	return &DynamoDBConfig{
 		Region:             "ap-northeast-2",
 		Endpoint:           "https://dynamodb.ap-northeast-2.amazonaws.com", //"http://localhost:4569",  "https://dynamodb.ap-northeast-2.amazonaws.com"
-		TableName:          "dynamo-test",
+		TableName:          "winnie-test",
 		ReadCapacityUnits:  ReadCapacityUnits,
 		WriteCapacityUnits: WriteCapacityUnits,
 	}

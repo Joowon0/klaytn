@@ -65,6 +65,7 @@ func newPartitionedDB(dbc *DBConfig, et DBEntryType, numPartitions uint) (*parti
 		copiedDBC.Dir = path.Join(copiedDBC.Dir, strconv.Itoa(i))
 		copiedDBC.LevelDBCacheSize /= int(numPartitions)
 
+		copiedDBC.DBType = DynamoDB
 		db, err := newDatabase(&copiedDBC, et)
 		if err != nil {
 			return nil, err
