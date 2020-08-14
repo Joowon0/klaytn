@@ -33,6 +33,8 @@ import (
 	"sync"
 	"time"
 
+	metricutils "github.com/klaytn/klaytn/metrics/utils"
+
 	"github.com/getlantern/deepcopy"
 
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -91,11 +93,8 @@ type dynamoDB struct {
 	logger log.Logger // Contextual logger tracking the database path
 
 	// metrics
-	batchWriteTimeMeter       metrics.Meter
-	batchWriteCountMeter      metrics.Meter
-	batchWriteSizeMeter       metrics.Meter
-	batchWriteSecPerItemMeter metrics.Meter
-	batchWriteSecPerByteMeter metrics.Meter
+	ReadCapabilityUnitsMeter  metrics.Meter
+	WriteCapabilityUnitsMeter metrics.Meter
 }
 
 type DynamoData struct {
@@ -369,12 +368,18 @@ func (dynamo *dynamoDB) Close() {
 }
 
 func (dynamo *dynamoDB) Meter(prefix string) {
-	// TODO-Klaytn: implement this later. Consider the return values of bathItemWrite
-	dynamo.batchWriteTimeMeter = metrics.NewRegisteredMeter(prefix+"batchwrite/time", nil)
-	dynamo.batchWriteCountMeter = metrics.NewRegisteredMeter(prefix+"batchwrite/count", nil)
-	dynamo.batchWriteSizeMeter = metrics.NewRegisteredMeter(prefix+"batchwrite/size", nil)
-	dynamo.batchWriteSecPerItemMeter = metrics.NewRegisteredMeter(prefix+"batchwrite/secperitem", nil)
-	dynamo.batchWriteSecPerByteMeter = metrics.NewRegisteredMeter(prefix+"batchwrite/secperbyte", nil)
+	dynamo.ReadCapabilityUnitsMeter = metrics.NewRegisteredMeter(prefix+"disk/read", nil)
+	dynamo.WriteCapabilityUnitsMeter = metrics.NewRegisteredMeter(prefix+"disk/write", nil)
+
+	// Short circuit metering if the metrics system is disabled
+	// Above meters are initialized by NilMeter if metricutils.Enabled == false
+	if !metricutils.Enabled {
+		return
+	}
+
+	// TODO-klaytn consider adding meter by dynamo db scanning
+	//     dynamo scanning is not recommended on very large tables
+	// go dynamo.meter(3 * time.Second)
 }
 
 func (dynamo *dynamoDB) NewIterator() Iterator {
