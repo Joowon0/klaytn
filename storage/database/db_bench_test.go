@@ -1,0 +1,189 @@
+package database
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/klaytn/klaytn/common"
+)
+
+type entry struct {
+	key []byte
+	val []byte
+}
+
+var workspace = os.Getenv("GOPATH") + "/src/github.com/klaytn/klaytn/storage/database/entries"
+var ldbWorkSpace = workspace + "/ldb"
+
+// make data file
+func BenchmarkCreateEntries(b *testing.B) {
+	fileName := fmt.Sprintf("%s/entries.txt", workspace)
+	b.Log(fileName)
+	fo, err := os.Create(fileName)
+	if err != nil {
+		panic(err)
+	}
+	// close fo on exit and check for its returned error
+	defer func() {
+		if err := fo.Close(); err != nil {
+			panic(err)
+		}
+	}()
+
+	for i := 0; i < b.N; i++ {
+		fo.Write(common.MakeRandomBytes(256)) // key
+		fo.Write(common.MakeRandomBytes(600)) // value
+	}
+}
+
+// read data file
+func GetEntries(b *testing.T, n int) []entry {
+	fileName := fmt.Sprintf("%s/entries.txt", workspace)
+	fi, err := os.Open(fileName)
+	if err != nil {
+		panic(err)
+	}
+	// close fi on exit and check for its returned error
+	defer func() {
+		if err := fi.Close(); err != nil {
+			b.Log("error while closing file")
+			panic(err)
+		}
+	}()
+
+	randomEntries := make([]entry, n)
+	keyBuff := make([]byte, 256)
+	valBuff := make([]byte, 600)
+	for i := 0; i < n; i++ {
+		n, err := fi.Read(keyBuff)
+		if err != nil && err != io.EOF && n != 256 {
+			b.Log("failed to get key from file")
+			assert.FailNow(b, err.Error())
+		}
+		n, err = fi.Read(valBuff)
+		if err != nil && err != io.EOF && n != 600 {
+			b.Log("failed to get value from file")
+			assert.FailNow(b, err.Error())
+		}
+		randomEntries[i].key = keyBuff
+		randomEntries[i].val = valBuff
+	}
+
+	return randomEntries
+}
+
+const entryNum = 100
+
+func Test_LevelRead(b *testing.T) {
+	benchDB(b, LevelDB, "get")
+}
+func Test_LevelWrite(b *testing.T) {
+	benchDB(b, LevelDB, "put")
+}
+func Test_LevelBatchWrite(b *testing.T) {
+	benchDB(b, LevelDB, "batchWrite")
+}
+func Test_DynamoRead(b *testing.T) {
+	benchDB(b, LevelDB, "get")
+}
+func Test_DynamoWrite(b *testing.T) {
+	benchDB(b, DynamoDB, "put")
+}
+
+func Test_DynamoBatchWrite(b *testing.T) {
+	benchDB(b, DynamoDB, "batchWrite")
+}
+
+func benchDB(b *testing.T, dbType DBType, testType string) {
+	dbc := &DBConfig{Dir: ldbWorkSpace, DBType: dbType, SingleDB: true, LevelDBCacheSize: 128, OpenFilesLimit: 128,
+		DynamoDBConfig: GetDefaultDynamoDBConfig()}
+	dbm := NewDBManager(dbc)
+	b.Log("generated db manager")
+	db := dbm.GetStateTrieDB()
+
+	// set function
+	var f func(key, value []byte) error
+	if testType == "put" {
+		f = func(key, value []byte) error {
+			b.Log("put called")
+			return db.Put(key, value)
+		}
+	} else if testType == "batchWrite" {
+		f = func(key, value []byte) error {
+			//newBatch
+			return nil
+		}
+	} else if testType == "get" {
+		f = func(key, value []byte) error {
+			val, err := db.Get(key)
+			if err != nil {
+				return err
+			}
+
+			assert.Equal(b, value, val)
+			return err
+		}
+	}
+
+	entries := GetEntries(b, entryNum)
+	b.Log("got entries")
+
+	//b.ResetTimer()
+	start := time.Now()
+
+	for i := 0; i < entryNum; i++ {
+		err := f(entries[i].key, entries[i].val)
+		if err != nil {
+			b.Log("error rw ", "err", err.Error(), "dbType=", dbType, " testType=", testType, " key=", entries[i].key, " value=", entries[i].val)
+		}
+	}
+
+	b.Log(time.Since(start))
+}
+
+func Benchmark_Rsde(b *testing.B) {
+	b.Log("start")
+	b.Log(b.N)
+	b.Log(b.N)
+	b.Log(b.N)
+	b.Log(b.N)
+	b.Log(b.N)
+	b.Log("end")
+}
+
+// go test -benchmem -run=^$ -bench ^(Benchmark_Rsde)$ -v
+
+func createWorker(t *testing.T, quitCh, inChan chan int) {
+	t.Log("start create worker")
+	for {
+		select {
+		case i := <-inChan:
+			t.Log("got input :", i)
+			time.Sleep(time.Second)
+
+		case <-quitCh:
+			t.Log("end worker")
+			return
+		}
+	}
+}
+
+func TestChannels(t *testing.T) {
+	quitChan := make(chan int)
+	inChan := make(chan int, 10)
+	go createWorker(t, quitChan, inChan)
+
+	for i := 0; i < 20; i++ {
+		inChan <- i
+	}
+
+	t.Log("closing")
+	close(quitChan)
+
+	time.Sleep(20 * time.Second)
+}
