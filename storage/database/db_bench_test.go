@@ -1,13 +1,13 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"testing"
 	"time"
-	"strconv"
-	"errors"
 
 	"github.com/stretchr/testify/assert"
 
@@ -105,26 +105,26 @@ func Test_DynamoBatchWrite(b *testing.T) {
 }
 
 func benchDB(b *testing.T, dbType DBType, testType string) {
-	dbc := &DBConfig{Dir: ldbWorkSpace+strconv.Itoa(entryNum), DBType: dbType, SingleDB: true, LevelDBCacheSize: 128, OpenFilesLimit: 128,
+	dbc := &DBConfig{Dir: ldbWorkSpace + strconv.Itoa(entryNum), DBType: dbType, SingleDB: true, LevelDBCacheSize: 128, OpenFilesLimit: 128,
 		DynamoDBConfig: GetDefaultDynamoDBConfig()}
 	dbm := NewDBManager(dbc)
 	db := dbm.GetStateTrieDB()
 
 	// set function
-	var f func(key, value []byte) error
+	var f func(key, value []byte, batch Batch) error
 	if testType == "put" {
-		f = func(key, value []byte) error {
+		f = func(key, value []byte, batch Batch) error {
 			return db.Put(key, value)
 		}
 	} else if testType == "batchWrite" {
-		f = func(key, value []byte) error {
-			//newBatch
+		f = func(key, value []byte, batch Batch) error {
+			batch.Put(key, value)
 			return nil
 		}
 	} else if testType == "get" {
-		f = func(key, value []byte) error {
+		f = func(key, value []byte, batch Batch) error {
 			val, err := db.Get(key)
-			if err != nil || len(val) == 0{
+			if err != nil || len(val) == 0 {
 				return err
 			}
 
@@ -132,7 +132,7 @@ func benchDB(b *testing.T, dbType DBType, testType string) {
 			return err
 		}
 	} else {
-		f = func(key, value []byte) error {
+		f = func(key, value []byte, batch Batch) error {
 			b.FailNow()
 			return errors.New("not correct test type")
 		}
@@ -141,17 +141,18 @@ func benchDB(b *testing.T, dbType DBType, testType string) {
 	entries := GetEntries(b, entryNum)
 
 	//b.ResetTimer()
-	// batch := db.newBatch()
+	batch := db.NewBatch()
 	fails := 0
 	start := time.Now()
 
 	for i := 0; i < entryNum; i++ {
-		err := f(entries[i].key, entries[i].val)
+		err := f(entries[i].key, entries[i].val, batch)
 		if err != nil {
-			b.Log("error rw ", "err", err.Error(), "dbType=", dbType, " testType=", testType)//, " key=", entries[i].key, " value=", entries[i].val)
-			fails ++
+			b.Log("error rw ", "err", err.Error(), "dbType=", dbType, " testType=", testType) //, " key=", entries[i].key, " value=", entries[i].val)
+			fails++
 		}
 	}
+	batch.Write()
 
 	b.Log("[took]", time.Since(start), "[fail]", fails)
 }
