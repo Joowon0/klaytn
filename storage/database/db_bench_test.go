@@ -6,6 +6,8 @@ import (
 	"os"
 	"testing"
 	"time"
+	"strconv"
+	"errors"
 
 	"github.com/stretchr/testify/assert"
 
@@ -17,11 +19,11 @@ type entry struct {
 	val []byte
 }
 
-var workspace = os.Getenv("GOPATH") + "/src/github.com/klaytn/klaytn/storage/database/entries"
+var workspace = "/home/ubuntu/klaytn/benchmark_data"
 var ldbWorkSpace = workspace + "/ldb"
 
 // make data file
-func BenchmarkCreateEntries(b *testing.B) {
+func TestCreateEntries(b *testing.T) {
 	fileName := fmt.Sprintf("%s/entries.txt", workspace)
 	b.Log(fileName)
 	fo, err := os.Create(fileName)
@@ -35,8 +37,11 @@ func BenchmarkCreateEntries(b *testing.B) {
 		}
 	}()
 
-	for i := 0; i < b.N; i++ {
-		fo.Write(common.MakeRandomBytes(256)) // key
+	for i := 0; i < 1000000; i++ {
+		_, err := fo.Write(common.MakeRandomBytes(256)) // key
+		if err != nil {
+		 b.Log("err: ", err)
+		}
 		fo.Write(common.MakeRandomBytes(600)) // value
 	}
 }
@@ -100,17 +105,15 @@ func Test_DynamoBatchWrite(b *testing.T) {
 }
 
 func benchDB(b *testing.T, dbType DBType, testType string) {
-	dbc := &DBConfig{Dir: ldbWorkSpace, DBType: dbType, SingleDB: true, LevelDBCacheSize: 128, OpenFilesLimit: 128,
+	dbc := &DBConfig{Dir: ldbWorkSpace+strconv.Itoa(entryNum), DBType: dbType, SingleDB: true, LevelDBCacheSize: 128, OpenFilesLimit: 128,
 		DynamoDBConfig: GetDefaultDynamoDBConfig()}
 	dbm := NewDBManager(dbc)
-	b.Log("generated db manager")
 	db := dbm.GetStateTrieDB()
 
 	// set function
 	var f func(key, value []byte) error
 	if testType == "put" {
 		f = func(key, value []byte) error {
-			b.Log("put called")
 			return db.Put(key, value)
 		}
 	} else if testType == "batchWrite" {
@@ -121,32 +124,39 @@ func benchDB(b *testing.T, dbType DBType, testType string) {
 	} else if testType == "get" {
 		f = func(key, value []byte) error {
 			val, err := db.Get(key)
-			if err != nil {
+			if err != nil || len(val) == 0{
 				return err
 			}
 
 			assert.Equal(b, value, val)
 			return err
 		}
+	} else {
+		f = func(key, value []byte) error {
+			b.FailNow()
+			return errors.New("not correct test type")
+		}
 	}
 
 	entries := GetEntries(b, entryNum)
-	b.Log("got entries")
 
 	//b.ResetTimer()
+	// batch := db.newBatch()
+	fails := 0
 	start := time.Now()
 
 	for i := 0; i < entryNum; i++ {
 		err := f(entries[i].key, entries[i].val)
 		if err != nil {
-			b.Log("error rw ", "err", err.Error(), "dbType=", dbType, " testType=", testType, " key=", entries[i].key, " value=", entries[i].val)
+			b.Log("error rw ", "err", err.Error(), "dbType=", dbType, " testType=", testType)//, " key=", entries[i].key, " value=", entries[i].val)
+			fails ++
 		}
 	}
 
-	b.Log(time.Since(start))
+	b.Log("[took]", time.Since(start), "[fail]", fails)
 }
 
-func Benchmark_Rsde(b *testing.B) {
+func _Benchmark_Rsde(b *testing.B) {
 	b.Log("start")
 	b.Log(b.N)
 	b.Log(b.N)
@@ -173,7 +183,7 @@ func createWorker(t *testing.T, quitCh, inChan chan int) {
 	}
 }
 
-func TestChannels(t *testing.T) {
+func _TestChannels(t *testing.T) {
 	quitChan := make(chan int)
 	inChan := make(chan int, 10)
 	go createWorker(t, quitChan, inChan)
