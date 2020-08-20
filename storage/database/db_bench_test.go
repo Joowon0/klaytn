@@ -75,8 +75,10 @@ func GetEntries(b *testing.T, n int) []entry {
 			b.Log("failed to get value from file")
 			assert.FailNow(b, err.Error())
 		}
-		randomEntries[i].key = keyBuff
-		randomEntries[i].val = valBuff
+		randomEntries[i].key = make([]byte, 256)
+		randomEntries[i].val = make([]byte, 600)
+		copy(randomEntries[i].key, keyBuff[:])
+		copy(randomEntries[i].val, valBuff[:])
 	}
 
 	return randomEntries
@@ -109,6 +111,7 @@ func benchDB(b *testing.T, dbType DBType, testType string) {
 		DynamoDBConfig: GetDefaultDynamoDBConfig()}
 	dbm := NewDBManager(dbc)
 	db := dbm.GetStateTrieDB()
+	dbm.Close()
 
 	// set function
 	var f func(key, value []byte, batch Batch) error
