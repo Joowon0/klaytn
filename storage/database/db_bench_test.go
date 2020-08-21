@@ -37,12 +37,17 @@ func TestCreateEntries(b *testing.T) {
 		}
 	}()
 
-	for i := 0; i < 1000000; i++ {
-		_, err := fo.Write(common.MakeRandomBytes(256)) // key
+	keys := common.MakeRandomBytesSlice(256,entryNum)
+	values := common.MakeRandomBytesSlice(600,entryNum)	
+	for i := 0; i < entryNum; i++ {
+		_, err := fo.Write(keys[i]) // key
 		if err != nil {
 		 b.Log("err: ", err)
 		}
-		fo.Write(common.MakeRandomBytes(600)) // value
+		_, err = fo.Write(values[i]) // value
+		if err != nil {
+			b.Log("err: ", err)
+		 }
 	}
 }
 

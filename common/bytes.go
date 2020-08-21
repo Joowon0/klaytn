@@ -145,6 +145,16 @@ func MakeRandomBytes(n int) []byte {
 	return s
 }
 
+func MakeRandomBytesSlice(length int, num int) [][]byte {
+	rand.Seed(time.Now().UTC().UnixNano())
+	result := make([][]byte, num)
+	for i := 0; i < num; i++ {
+		result[i] = make([]byte, length)
+		rand.Read(result[i])
+	}
+	return result
+}
+
 // IntToByteLittleEndian encodes a number as little endian uint64
 func Int64ToByteLittleEndian(num uint64) []byte {
 	enc := make([]byte, 8)
