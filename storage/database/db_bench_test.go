@@ -101,7 +101,7 @@ func Test_LevelBatchWrite(b *testing.T) {
 	benchDB(b, LevelDB, "batchWrite")
 }
 func Test_DynamoRead(b *testing.T) {
-	benchDB(b, LevelDB, "get")
+	benchDB(b, DynamoDB, "get")
 }
 func Test_DynamoWrite(b *testing.T) {
 	benchDB(b, DynamoDB, "put")
@@ -116,7 +116,7 @@ func benchDB(b *testing.T, dbType DBType, testType string) {
 		DynamoDBConfig: GetDefaultDynamoDBConfig()}
 	dbm := NewDBManager(dbc)
 	db := dbm.GetStateTrieDB()
-	dbm.Close()
+	defer dbm.Close()
 
 	// set function
 	var f func(key, value []byte, batch Batch) error
