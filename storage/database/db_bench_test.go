@@ -4,14 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/klaytn/klaytn/common"
 )
 
 type entry struct {
@@ -37,17 +36,17 @@ func TestCreateEntries(b *testing.T) {
 		}
 	}()
 
-	keys := common.MakeRandomBytesSlice(256,entryNum)
-	values := common.MakeRandomBytesSlice(600,entryNum)	
+	keys := MakeRandomBytesSlice(256, entryNum)
+	values := MakeRandomBytesSlice(600, entryNum)
 	for i := 0; i < entryNum; i++ {
 		_, err := fo.Write(keys[i]) // key
 		if err != nil {
-		 b.Log("err: ", err)
+			b.Log("err: ", err)
 		}
 		_, err = fo.Write(values[i]) // value
 		if err != nil {
 			b.Log("err: ", err)
-		 }
+		}
 	}
 }
 
@@ -165,44 +164,12 @@ func benchDB(b *testing.T, dbType DBType, testType string) {
 	b.Log("[took]", time.Since(start), "[fail]", fails)
 }
 
-func _Benchmark_Rsde(b *testing.B) {
-	b.Log("start")
-	b.Log(b.N)
-	b.Log(b.N)
-	b.Log(b.N)
-	b.Log(b.N)
-	b.Log(b.N)
-	b.Log("end")
-}
-
-// go test -benchmem -run=^$ -bench ^(Benchmark_Rsde)$ -v
-
-func createWorker(t *testing.T, quitCh, inChan chan int) {
-	t.Log("start create worker")
-	for {
-		select {
-		case i := <-inChan:
-			t.Log("got input :", i)
-			time.Sleep(time.Second)
-
-		case <-quitCh:
-			t.Log("end worker")
-			return
-		}
+func MakeRandomBytesSlice(length int, num int) [][]byte {
+	rand.Seed(time.Now().UTC().UnixNano())
+	result := make([][]byte, num)
+	for i := 0; i < num; i++ {
+		result[i] = make([]byte, length)
+		rand.Read(result[i])
 	}
-}
-
-func _TestChannels(t *testing.T) {
-	quitChan := make(chan int)
-	inChan := make(chan int, 10)
-	go createWorker(t, quitChan, inChan)
-
-	for i := 0; i < 20; i++ {
-		inChan <- i
-	}
-
-	t.Log("closing")
-	close(quitChan)
-
-	time.Sleep(20 * time.Second)
+	return result
 }
