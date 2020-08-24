@@ -216,7 +216,7 @@ type DBManager interface {
 
 	// DB migration related function
 	GetDBMigrationStatusInfo() error
-	StartDBMigration(*DBManager) error
+	StartDBMigration(DBManager) error
 	PauseDBMigration() error
 	StopDBMigration() error
 }
@@ -2029,21 +2029,4 @@ func (dbm *databaseManager) WriteGovernanceState(b []byte) error {
 func (dbm *databaseManager) ReadGovernanceState() ([]byte, error) {
 	db := dbm.getDatabase(MiscDB)
 	return db.Get(governanceStateKey)
-}
-
-func (dbm *databaseManager) GetDBMigrationStatusInfo() error {
-
-	return nil
-}
-
-func (dbm *databaseManager) StartDBMigration(dstdbm *DBManager) error {
-	return nil
-}
-
-func (dbm *databaseManager) PauseDBMigration() error {
-	return nil
-}
-
-func (dbm *databaseManager) StopDBMigration() error {
-	return nil
 }

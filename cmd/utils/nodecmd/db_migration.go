@@ -101,7 +101,7 @@ func startMigration(ctx *cli.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "Failed to create db manager")
 	}
-	return srcDBManager.StartDBMigration(&dstDBManager)
+	return srcDBManager.StartDBMigration(dstDBManager)
 }
 
 func pauseMigration(ctx *cli.Context) error {
