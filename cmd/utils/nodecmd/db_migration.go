@@ -1,12 +1,11 @@
 package nodecmd
 
 import (
-	"errors"
+	"github.com/pkg/errors"
 
 	"github.com/klaytn/klaytn/storage/database"
 
 	"github.com/klaytn/klaytn/cmd/utils"
-	"github.com/prometheus/common/log"
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -90,25 +89,35 @@ Consider using pause if you want to continue db migration later.`,
 )
 
 func statusMigration(ctx *cli.Context) error {
-	log.Info("DB migration status")
-	return nil
+	srcDBManager, _, err := getDBManager(ctx)
+	if err != nil {
+		return errors.Wrap(err, "Failed to create db manager")
+	}
+	return srcDBManager.GetDBMigrationStatusInfo()
 }
 
 func startMigration(ctx *cli.Context) error {
-	log.Info("DB migration started")
-
-	// start migration
-	return nil
+	srcDBManager, dstDBManager, err := getDBManager(ctx)
+	if err != nil {
+		return errors.Wrap(err, "Failed to create db manager")
+	}
+	return srcDBManager.StartDBMigration(&dstDBManager)
 }
 
 func pauseMigration(ctx *cli.Context) error {
-	log.Info("DB migration paused")
-	return nil
+	srcDBManager, _, err := getDBManager(ctx)
+	if err != nil {
+		return errors.Wrap(err, "Failed to create db manager")
+	}
+	return srcDBManager.PauseDBMigration()
 }
 
 func stopMigration(ctx *cli.Context) error {
-	log.Info("DB migration stopped")
-	return nil
+	srcDBManager, _, err := getDBManager(ctx)
+	if err != nil {
+		return errors.Wrap(err, "Failed to create db manager")
+	}
+	return srcDBManager.GetDBMigrationStatusInfo()
 }
 
 func getDBManager(ctx *cli.Context) (database.DBManager, database.DBManager, error) {
@@ -119,6 +128,7 @@ func getDBManager(ctx *cli.Context) (database.DBManager, database.DBManager, err
 	}
 	var dstDBType database.DBType
 	if dstDBType = database.DBType(ctx.GlobalString(DstDbTypeFlag.Name)).ToValid(); len(dstDBType) != 0 {
+		// TODO-Klaytn dstDB is necessary for status, pause, stop
 		return nil, nil, errors.New("dstDB is not specified")
 	}
 	singleDB := ctx.GlobalBool(utils.SingleDBFlag.Name)
