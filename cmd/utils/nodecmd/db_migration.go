@@ -2,6 +2,9 @@ package nodecmd
 
 import (
 	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"runtime"
 
 	"github.com/pkg/errors"
 
@@ -12,6 +15,8 @@ import (
 )
 
 var (
+	dbMigrationDir = ""
+
 	// key used to store entries in miscDB
 	DBMigrationDSTInfoKey    = []byte("db_migration_dst")
 	DBMigrationCheckpointKey = []byte("db_migration_checkpoint")
@@ -87,20 +92,24 @@ Consider using pause if you want to continue db migration later.`,
 	}
 )
 
+func init() {
+	_, filename, _, _ := runtime.Caller(0)
+	dbMigrationDir = filepath.Join(filepath.Dir(filename), "..", "..", "..", "db_migration")
+}
+
 func statusMigration(ctx *cli.Context) error {
-	srcDBConfig, _, err := createDBConfig(ctx)
-	if err != nil {
-		return errors.Wrap(err, "Failed to create db manager")
-	}
-	srcDBManager := database.NewDBManager(srcDBConfig)
-	return srcDBManager.GetDBMigrationStatusInfo()
+	fmt.Println(dbMigrationDir)
+	return nil
 }
 
 func startMigration(ctx *cli.Context) error {
 	srcDBManager, dstDBManager, err := createDBManager(ctx)
+	defer srcDBManager.Close()
+	defer dstDBManager.Close()
 	if err != nil {
 		return err
 	}
+
 	return srcDBManager.StartDBMigration(dstDBManager)
 }
 
@@ -125,6 +134,9 @@ func stopMigration(ctx *cli.Context) error {
 func createDBManager(ctx *cli.Context) (database.DBManager, database.DBManager, error) {
 	// create db config from ctx
 	srcDBConfig, dstDBConfig, dbManagerCreationErr := createDBConfig(ctx)
+	if dbManagerCreationErr != nil {
+		return nil, nil, dbManagerCreationErr
+	}
 	srcDBManager := database.NewDBManager(srcDBConfig)
 
 	// check and set dst DB config
@@ -148,6 +160,11 @@ func createDBManager(ctx *cli.Context) (database.DBManager, database.DBManager, 
 }
 
 func createDBConfig(ctx *cli.Context) (*database.DBConfig, *database.DBConfig, error) {
+	// TODO enable for all dbs
+	if !ctx.GlobalBool(utils.SingleDBFlag.Name) || !ctx.GlobalBool(utils.DstSingleDBFlag.Name) {
+		return nil, nil, errors.New("this feature is provided for single db only")
+	}
+
 	// srcDB
 	srcDBC := &database.DBConfig{
 		Dir:                ctx.GlobalString(utils.DataDirFlag.Name),
@@ -225,3 +242,5 @@ func getDSTConfig(srcDB database.DBManager) (*database.DBConfig, error) {
 
 	return dstConfig, nil
 }
+
+// ./ken db-migration start --datadir /home/ubuntu/klaytn/benchmark_data/ldb1000 --dst.datadir /home/ubuntu/klaytn/benchmark_data/copied

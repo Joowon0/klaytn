@@ -2,7 +2,9 @@ package database
 
 import (
 	"encoding/json"
-	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/pkg/errors"
 )
@@ -22,57 +24,61 @@ func (dbm *databaseManager) GetDBMigrationStatusInfo() error {
 }
 
 func (dbm *databaseManager) StartDBMigration(dstdbm DBManager) error {
-	fmt.Println(dbm.config)
-	fmt.Println(dstdbm.GetDBConfig())
+	// s, _ := json.Marshal(dbm.config)
+	// fmt.Println(string(s))
+	// d, _ := json.Marshal(dstdbm.GetDBConfig())
+	// fmt.Println(string(d))
 	//TODO setup signal interrupt
-	//sigc := make(chan os.Signal, 1)
-	//signal.Notify(sigc,
-	//	syscall.SIGHUP,
-	//	syscall.SIGINT,
-	//	syscall.SIGTERM,
-	//	syscall.SIGQUIT)
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
 
-	//// get checkpoint if exits
-	//checkpoint, err := dbm.getDBMigrationCheckpoint()
-	//dbStartpoint := MiscDB
-	//if checkpoint != nil || err == nil {
-	//	dbStartpoint = checkpoint.db
-	//}
-	//
-	//// for each DB
-	//for i, srcDB := range dbm.dbs[dbStartpoint:] {
-	//	dstDB := dstdbm.getDatabase(DBEntryType(i))
-	//
-	//	// create src iterator and dst batch
-	//	srcIter := srcDB.NewIterator()
-	//	dstBatch := dstDB.NewBatch()
-	//
-	//	// create iterator and iterate
-	//	entries, fetched := iterateDB(srcIter, fetchNum)
-	//	iterateNum := 0
-	//	for len(entries) != 0 && fetched > 0 {
-	//		logger.Info("fetched items", " [count]", iterateNum, " [num]", fetched)
-	//		for i := 0; i < fetched; i++ {
-	//			dstBatch.Put(entries[i].key, entries[i].val)
-	//		}
-	//
-	//		entries, fetched = iterateDB(srcIter, 500)
-	//		iterateNum++
-	//	}
-	//
-	//	err := dstBatch.Write()
-	//	if err != nil {
-	//		errors.Wrap(err, "failed to write items in DynamoDB")
-	//	}
-	//
-	//	srcIter.Release()
-	//	err = srcIter.Error()
-	//	if err != nil {
-	//		errors.Wrap(err, "failed to iterate levelDB")
-	//	}
-	//
-	//	return nil
-	//}
+	// get checkpoint if exits
+	// checkpoint, err := dbm.getDBMigrationCheckpoint()
+
+	// TODO enable for all dbs
+	srcDB := dbm.dbs[0]
+	dstDB := dstdbm.getDatabase(DBEntryType(MiscDB))
+
+	// create src iterator and dst batch
+	srcIter := srcDB.NewIterator()
+	dstBatch := dstDB.NewBatch()
+
+	// create iterator and iterate
+	entries, fetched := iterateDB(srcIter, fetchNum)
+	iterateNum := 0
+loop:
+	for len(entries) != 0 && fetched > 0 {
+		logger.Info("fetched items", " [count]", iterateNum, " [num]", fetched)
+		for i := 0; i < fetched; i++ {
+			dstBatch.Put(entries[i].key, entries[i].val)
+		}
+
+		select {
+		case <-sigc:
+			logger.Info("exit called")
+			// dbm.setDBMigrationCheckpoint(checkpoint)
+			break loop
+		default:
+		}
+
+		entries, fetched = iterateDB(srcIter, fetchNum)
+		iterateNum++
+	}
+
+	err := dstBatch.Write()
+	if err != nil {
+		return errors.Wrap(err, "failed to write items")
+	}
+
+	srcIter.Release()
+	err = srcIter.Error()
+	if err != nil {
+		return errors.Wrap(err, "failed to iterate")
+	}
 
 	return nil
 }
@@ -85,6 +91,8 @@ func iterateDB(iter Iterator, num int) ([]entry, int) {
 		// only valid until the next call to Next.
 		key := iter.Key()
 		val := iter.Value()
+
+		// logger.Info("fetched", "key", key, "val", val)
 
 		entries[i].key = make([]byte, len(key))
 		entries[i].val = make([]byte, len(val))
@@ -103,21 +111,16 @@ func (dbm *databaseManager) StopDBMigration() error {
 	return nil
 }
 
-// db migrationcheckpoint
+// db migration checkpoint
 type DBMigrationCheckpoint struct {
 	db         DBEntryType // db index
 	checkpoint []byte
 }
 
-func (dbm *databaseManager) setDBMigrationCheckpoint(checkpoint DBMigrationCheckpoint) error {
-	miscDB := dbm.GetMiscDB()
+func (dbm *databaseManager) setDBMigrationCheckpoint(until []byte) error {
+	return nil
 
-	marshaled, err := json.Marshal(checkpoint)
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal DBConfig")
-	}
-
-	return miscDB.Put(DBMigrationCheckpointKey, marshaled)
+	// return miscDB.Put(DBMigrationCheckpointKey, marshaled)
 }
 
 func (dbm *databaseManager) getDBMigrationCheckpoint() (*DBMigrationCheckpoint, error) {
