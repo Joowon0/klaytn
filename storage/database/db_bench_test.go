@@ -103,7 +103,7 @@ func GetEntries(b *testing.T, n int) []entry {
 	return randomEntries
 }
 
-const entryNum = 1000
+const entryNum = 100
 
 func Test_LevelRead(b *testing.T) {
 	benchDB(b, LevelDB, "get")
@@ -246,4 +246,35 @@ loop:
 		}
 		time.Sleep(1 * time.Second)
 	}
+}
+
+func TestIteratorPrefix(b *testing.T) {
+	dbc := &DBConfig{Dir: workspace + "/to", DBType: LevelDB, SingleDB: true, LevelDBCacheSize: 128, OpenFilesLimit: 128,
+		NumStateTrieShards: 1, DynamoDBConfig: GetDefaultDynamoDBConfig()}
+	dbc.DynamoDBConfig.TableName = "winnie-migration"
+	dbcjson, _ := json.Marshal(*dbc)
+	b.Log(string(dbcjson))
+	dbm := NewDBManager(dbc)
+	db := dbm.GetStateTrieDB()
+	defer dbm.Close()
+
+	b.Log("prefix with 0")
+	num := 0
+	it := db.NewIteratorWithPrefix([]byte{0})
+	for it.Next() {
+		b.Log(it.Key()[:5])
+		num++
+	}
+	it.Release()
+
+	b.Log("prefix with 1")
+	num2 := 1
+	it = db.NewIteratorWithPrefix([]byte{1})
+	for it.Next() {
+		b.Log(it.Key()[:5])
+		num2++
+	}
+	it.Release()
+
+	b.Log("prefix 0 :", num, "prefix 1 :", num2, "total", num+num2)
 }
