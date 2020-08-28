@@ -103,7 +103,7 @@ func GetEntries(b *testing.T, n int) []entry {
 	return randomEntries
 }
 
-const entryNum = 1000
+const entryNum = 100
 
 func Test_LevelRead(b *testing.T) {
 	benchDB(b, LevelDB, "get")
@@ -268,7 +268,7 @@ func TestIteratorPrefix(b *testing.T) {
 	it.Release()
 
 	b.Log("prefix with 1")
-	num2 :=1
+	num2 := 1
 	it = db.NewIteratorWithPrefix([]byte{1})
 	for it.Next() {
 		b.Log(it.Key()[:5])
