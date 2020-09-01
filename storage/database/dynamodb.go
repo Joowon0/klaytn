@@ -498,6 +498,7 @@ func (batch *dynamoBatch) Put(key, val []byte) error {
 	batch.size += dataSize
 
 	if len(batch.batchItems) == dynamoBatchSize {
+		batch.removeDuplicates()
 		batch.wg.Add(1)
 		dynamoWriteCh <- &batchWriteWorkerInput{batch.tableName, batch.batchItems, batch.wg}
 		batch.Reset()
@@ -506,6 +507,8 @@ func (batch *dynamoBatch) Put(key, val []byte) error {
 }
 
 func (batch *dynamoBatch) Write() error {
+	batch.removeDuplicates()
+
 	var writeRequest []*dynamodb.WriteRequest
 	numRemainedItems := len(batch.batchItems)
 
@@ -523,6 +526,20 @@ func (batch *dynamoBatch) Write() error {
 
 	batch.wg.Wait()
 	return nil
+}
+
+func (batch *dynamoBatch) removeDuplicates() {
+	checkDupl := make(map[string]bool)
+	newBatchItem := []*dynamodb.WriteRequest{}
+	// iterate in reverse to use the latest value
+	for i := len(batch.batchItems) - 1; i >= 0; i-- {
+		key := batch.batchItems[i].PutRequest.Item["Key"].B
+		if _, exists := checkDupl[string(key)]; !exists {
+			checkDupl[string(key)] = true
+			newBatchItem = append(newBatchItem, batch.batchItems[i])
+		}
+	}
+	batch.batchItems = newBatchItem
 }
 
 func (batch *dynamoBatch) ValueSize() int {

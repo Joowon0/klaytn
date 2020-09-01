@@ -113,6 +113,46 @@ func testDynamoBatch_WriteLargeData(t *testing.T) {
 	}
 }
 
+func TestDynamoBatch_RemoveDuplicates(t *testing.T) {
+	dynamo, err := NewDynamoDB(GetDefaultDynamoDBConfig())
+	defer dynamo.deletedDB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log("dynamoDB", dynamo.config.TableName)
+
+	var testKeys [][]byte
+	var testVals [][]byte
+	batch := dynamo.NewBatch()
+
+	itemNum := 5
+	for i := 0; i < itemNum; i++ {
+		// put item
+		testKey := common.MakeRandomBytes(10)
+		testVal := common.MakeRandomBytes(10)
+
+		assert.NoError(t, batch.Put(testKey, testVal))
+
+		// put item with duplicated key
+		for j := 0; j < 5; j++ {
+			testVal = common.MakeRandomBytes(10)
+			assert.NoError(t, batch.Put(testKey, testVal))
+		}
+
+		// store the latest data
+		testKeys = append(testKeys, testKey)
+		testVals = append(testVals, testVal)
+	}
+	assert.NoError(t, batch.Write())
+
+	// check if exist
+	for i := 0; i < len(testKeys); i++ {
+		returnedVal, returnedErr := dynamo.Get(testKeys[i])
+		assert.NoError(t, returnedErr)
+		assert.Equal(t, hexutil.Encode(testVals[i]), hexutil.Encode(returnedVal))
+	}
+}
+
 func (dynamo *dynamoDB) deletedDB() {
 	dynamo.Close()
 	dynamo.deleteTable()
