@@ -160,6 +160,7 @@ func newDynamoDB(config *DynamoDBConfig) (*dynamoDB, error) {
 		config: *config,
 		fdb:    s3FileDB,
 	}
+	strings.ReplaceAll(dynamoDB.config.TableName, "_", "-")
 
 	dynamoDB.logger = logger.NewWith("region", config.Region, "tableName", dynamoDB.config.TableName)
 
