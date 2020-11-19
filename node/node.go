@@ -190,17 +190,20 @@ func (n *Node) Start() error {
 
 	p2pServer := p2p.NewServer(n.serverConfig)
 	n.logger.Info("Starting peer-to-peer node", "instance", n.serverConfig.Name)
+	logger.Error("[WINNIE] NewServer")
 
 	// Otherwise copy and specialize the P2P configuration
 	coreservices := make(map[reflect.Type]Service)
 	if err := n.initService(n.coreServiceFuncs, coreservices); err != nil {
 		return err
 	}
+	logger.Error("[WINNIE] initService")
 
 	services := make(map[reflect.Type]Service)
 	if err := n.initService(n.serviceFuncs, services); err != nil {
 		return err
 	}
+	logger.Error("[WINNIE] initService2")
 
 	// Gather the protocols and start the freshly assembled P2P server
 	for _, service := range coreservices {
@@ -212,6 +215,8 @@ func (n *Node) Start() error {
 			s.SetComponents(service.Components())
 		}
 	}
+	logger.Error("[WINNIE] coreservices")
+
 	if err := p2pServer.Start(); err != nil {
 		return convertFileLockError(err)
 	}

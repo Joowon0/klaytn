@@ -22,6 +22,10 @@ package nodecmd
 
 import (
 	"fmt"
+	"os"
+	"runtime"
+	"strings"
+
 	"github.com/klaytn/klaytn/accounts"
 	"github.com/klaytn/klaytn/accounts/keystore"
 	"github.com/klaytn/klaytn/api/debug"
@@ -32,9 +36,6 @@ import (
 	"github.com/klaytn/klaytn/node"
 	"github.com/klaytn/klaytn/node/cn"
 	"gopkg.in/urfave/cli.v1"
-	"os"
-	"runtime"
-	"strings"
 )
 
 const (
@@ -48,7 +49,9 @@ const (
 // blocking mode, waiting for it to be shut down.
 func RunKlaytnNode(ctx *cli.Context) error {
 	fullNode := MakeFullNode(ctx)
+	logger.Error("[winnie] **** MakeFullNode")
 	startNode(ctx, fullNode)
+	logger.Error("[winnie] **** startNode")
 	fullNode.Wait()
 	return nil
 }
@@ -61,20 +64,28 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 
 	// Start up the node itself
 	utils.StartNode(stack)
+	logger.Error("[winnie] StartNode")
 
 	// Unlock any account specifically requested
 	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
+	logger.Error("[winnie] AccountManager().Backends")
 
 	passwords := utils.MakePasswordList(ctx)
+	logger.Error("[winnie] MakePasswordList")
 	unlocks := strings.Split(ctx.GlobalString(utils.UnlockedAccountFlag.Name), ",")
 	for i, account := range unlocks {
 		if trimmed := strings.TrimSpace(account); trimmed != "" {
 			UnlockAccount(ctx, ks, trimmed, i, passwords)
 		}
 	}
+
+	logger.Error("[winnie] Split")
+
 	// Register wallet event handlers to open and auto-derive wallets
 	events := make(chan accounts.WalletEvent, 16)
 	stack.AccountManager().Subscribe(events)
+
+	logger.Error("[winnie] AccountManager().Subscribe(events")
 
 	go func() {
 		// Create a chain state reader for self-derivation
@@ -114,11 +125,15 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 		}
 	}()
 
+	logger.Error("[winnie] wallet")
+
 	if utils.NetworkTypeFlag.Value == SCNNetworkType && utils.ServiceChainConsensusFlag.Value == "clique" {
 		logger.Crit("using clique consensus type is not allowed anymore!")
 	} else {
 		startKlaytnAuxiliaryService(ctx, stack)
 	}
+
+	logger.Error("[winnie] startKlaytnAuxiliaryService")
 }
 
 func startKlaytnAuxiliaryService(ctx *cli.Context, stack *node.Node) {

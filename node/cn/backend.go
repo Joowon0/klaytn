@@ -300,20 +300,30 @@ func New(ctx *node.ServiceContext, config *Config) (*CN, error) {
 		return nil, err
 	}
 
+	logger.Error("[WINNIE] NewProtocolManager")
+
 	if err := cn.setAcceptTxs(); err != nil {
 		logger.Error("Failed to decode IstanbulExtra", "err", err)
 	}
 
+	logger.Error("[WINNIE] setAcceptTxs")
+
 	cn.protocolManager.SetWsEndPoint(config.WsEndpoint)
+
+	logger.Error("[WINNIE] SetWsEndPoint")
 
 	if err := cn.setRewardWallet(); err != nil {
 		logger.Error("Error happened while setting the reward wallet", "err", err)
 	}
 
+	logger.Error("[WINNIE] setRewardWallet")
+
 	if governance.ProposerPolicy() == uint64(istanbul.WeightedRandom) {
 		// NewStakingManager is called with proper non-nil parameters
 		reward.NewStakingManager(cn.blockchain, governance, cn.chainDB)
 	}
+
+	logger.Error("[WINNIE] NewStakingManager")
 
 	// set worker
 	if config.WorkerDisable {
@@ -323,10 +333,16 @@ func New(ctx *node.ServiceContext, config *Config) (*CN, error) {
 		cn.miner = work.New(cn, cn.chainConfig, cn.EventMux(), cn.engine, ctx.NodeType(), crypto.PubkeyToAddress(ctx.NodeKey().PublicKey), cn.config.TxResendUseLegacy)
 	}
 
+	logger.Error("[WINNIE] work.New")
+
 	// istanbul BFT
 	cn.miner.SetExtra(makeExtraData(config.ExtraData))
 
+	logger.Error("[WINNIE] SetExtra")
+
 	cn.APIBackend = &CNAPIBackend{cn, nil}
+
+	logger.Error("[WINNIE] CNAPIBackend")
 
 	gpoParams := config.GPO
 
@@ -335,11 +351,14 @@ func New(ctx *node.ServiceContext, config *Config) (*CN, error) {
 	gpoParams.Default = config.GasPrice
 
 	cn.APIBackend.gpo = gasprice.NewOracle(cn.APIBackend, gpoParams)
+	logger.Error("[WINNIE] NewOracle")
 	//@TODO Klaytn add core component
 	cn.addComponent(cn.blockchain)
 	cn.addComponent(cn.txPool)
 	cn.addComponent(cn.APIs())
 	cn.addComponent(cn.ChainDB())
+
+	logger.Error("[WINNIE]  addComponent")
 
 	if config.AutoRestartFlag {
 		daemonPath := config.DaemonPathFlag
@@ -371,10 +390,14 @@ func New(ctx *node.ServiceContext, config *Config) (*CN, error) {
 		}()
 	}
 
+	logger.Error("[WINNIE]  AutoRestartFlag")
+
 	// Only for KES nodes
 	if config.TrieNodeCacheConfig.RedisSubscribeBlockEnable {
 		go cn.blockchain.BlockSubscriptionLoop(cn.txPool.(*blockchain.TxPool))
 	}
+
+	logger.Error("[WINNIE]  BlockSubscriptionLoop")
 
 	return cn, nil
 }
@@ -390,6 +413,7 @@ func (s *CN) setAcceptTxs() error {
 				s.protocolManager.SetAcceptTxs()
 			}
 		}
+		logger.Info("ExtractIstanbulExtra")
 	}
 	return nil
 }

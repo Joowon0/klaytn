@@ -391,13 +391,27 @@ func MakeFullNode(ctx *cli.Context) *node.Node {
 	} else {
 		utils.RegisterCNService(stack, &cfg.CN)
 	}
+
+	logger.Error("[WINNIE] **** RegisterCNService")
+
 	utils.RegisterService(stack, &scfg)
 
+	logger.Error("[winnie] **** RegisterService")
+
 	dbfg := makeDBSyncerConfig(ctx)
+
+	logger.Error("[winnie] **** makeDBSyncerConfig")
+
 	utils.RegisterDBSyncerService(stack, &dbfg)
 
+	logger.Error("[winnie] **** RegisterDBSyncerService")
+
 	chaindataFetcherConfig := makeChainDataFetcherConfig(ctx)
+
+	logger.Error("[winnie] **** makeChainDataFetcherConfig")
+
 	utils.RegisterChainDataFetcherService(stack, &chaindataFetcherConfig)
+	logger.Error("[winnie] **** RegisterChainDataFetcherService")
 
 	return stack
 }

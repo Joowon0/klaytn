@@ -18,13 +18,14 @@ package reward
 
 import (
 	"errors"
+	"sync"
+
 	"github.com/klaytn/klaytn/blockchain"
 	"github.com/klaytn/klaytn/blockchain/state"
 	"github.com/klaytn/klaytn/blockchain/types"
 	"github.com/klaytn/klaytn/common"
 	"github.com/klaytn/klaytn/event"
 	"github.com/klaytn/klaytn/params"
-	"sync"
 )
 
 const (
@@ -91,6 +92,7 @@ func NewStakingManager(bc blockChain, gh governanceHelper, db stakingInfoDB) *St
 				return CheckStakingInfoStored(blockNum + params.StakingUpdateInterval())
 			})
 		})
+		logger.Info("set StakingManager")
 	} else {
 		logger.Error("unable to set StakingManager", "blockchain", bc, "governanceHelper", gh)
 	}
