@@ -375,6 +375,7 @@ func (srv *MultiChannelServer) Start() (err error) {
 		srv.ntab = ntab
 	}
 
+	srv.logger.Error("MultiChannelServer.Start newDialState", "static", srv.StaticNodes)
 	dialer := newDialState(srv.StaticNodes, srv.BootstrapNodes, srv.ntab, srv.maxDialedConns(), srv.NetRestrict, srv.PrivateKey, srv.getTypeStatics())
 
 	// handshake
@@ -499,6 +500,8 @@ func (srv *MultiChannelServer) SetupConn(fd net.Conn, flags connFlag, dialDest *
 		return errors.New("shutdown")
 	}
 
+	logger.Error("MultiChannelServer.SetupConn", "id", dialDest.ID, "ip", dialDest.IP)
+
 	c := &conn{fd: fd, transport: srv.newTransport(fd), flags: flags, conntype: common.ConnTypeUndefined, cont: make(chan error), portOrder: PortOrderUndefined}
 	if dialDest != nil {
 		c.portOrder = PortOrder(dialDest.PortOrder)
@@ -516,7 +519,7 @@ func (srv *MultiChannelServer) SetupConn(fd net.Conn, flags connFlag, dialDest *
 	err := srv.setupConn(c, flags, dialDest)
 	if err != nil {
 		c.close(err)
-		srv.logger.Trace("Setting up connection failed", "id", c.id, "err", err)
+		srv.logger.Error("Setting up connection failed", "id", c.id, "err", err)
 	}
 	return err
 }
@@ -535,38 +538,42 @@ func (srv *MultiChannelServer) setupConn(c *conn, flags connFlag, dialDest *disc
 
 	var err error
 	// Run the connection type handshake
+	logger.Error("MultiChannelServer.doConnTypeHandshake", "id", dialDest.ID, "ip", dialDest.IP)
 	if c.conntype, err = c.doConnTypeHandshake(srv.ConnectionType); err != nil {
-		srv.logger.Warn("Failed doConnTypeHandshake", "addr", c.fd.RemoteAddr(), "conn", c.flags,
+		srv.logger.Error("Failed doConnTypeHandshake", "addr", c.fd.RemoteAddr(), "conn", c.flags,
 			"conntype", c.conntype, "err", err)
 		return err
 	}
-	srv.logger.Trace("Connection Type Trace", "addr", c.fd.RemoteAddr(), "conn", c.flags, "ConnType", c.conntype.String())
+	srv.logger.Error("MultiChannelServer.Connection Type Trace", "addr", c.fd.RemoteAddr(), "conn", c.flags, "ConnType", c.conntype.String())
 
 	// Run the encryption handshake.
+	logger.Error("MultiChannelServer.doEncHandshake", "id", dialDest.ID, "ip", dialDest.IP)
 	if c.id, err = c.doEncHandshake(srv.PrivateKey, dialDest); err != nil {
-		srv.logger.Trace("Failed RLPx handshake", "addr", c.fd.RemoteAddr(), "conn", c.flags, "err", err)
+		srv.logger.Error("Failed RLPx handshake", "addr", c.fd.RemoteAddr(), "conn", c.flags, "err", err)
 		return err
 	}
 
 	clog := srv.logger.NewWith("id", c.id, "addr", c.fd.RemoteAddr(), "conn", c.flags)
 	// For dialed connections, check that the remote public key matches.
 	if dialDest != nil && c.id != dialDest.ID {
-		clog.Trace("Dialed identity mismatch", "want", c, dialDest.ID)
+		clog.Error("Dialed identity mismatch", "want", c, dialDest.ID)
 		return DiscUnexpectedIdentity
 	}
+	logger.Error("MultiChannelServer.checkpoint posthandshake", "id", dialDest.ID, "ip", dialDest.IP)
 	err = srv.checkpoint(c, srv.posthandshake)
 	if err != nil {
-		clog.Trace("Rejected peer before protocol handshake", "err", err)
+		clog.Error("Rejected peer before protocol handshake", "err", err)
 		return err
 	}
 	// Run the protocol handshake
+	logger.Error("MultiChannelServer.doProtoHandshake", "id", dialDest.ID, "ip", dialDest.IP)
 	phs, err := c.doProtoHandshake(srv.ourHandshake)
 	if err != nil {
-		clog.Trace("Failed protobuf handshake", "err", err)
+		clog.Error("Failed protobuf handshake", "err", err)
 		return err
 	}
 	if phs.ID != c.id {
-		clog.Trace("Wrong devp2p handshake identity", "err", phs.ID)
+		clog.Error("Wrong devp2p handshake identity", "err", phs.ID)
 		return DiscUnexpectedIdentity
 	}
 	c.caps, c.name, c.multiChannel = phs.Caps, phs.Name, phs.Multichannel
@@ -581,20 +588,21 @@ func (srv *MultiChannelServer) setupConn(c *conn, flags connFlag, dialDest *disc
 		return nil
 	}
 
+	logger.Error("MultiChannelServer.checkpoint addpeer", "id", dialDest.ID, "ip", dialDest.IP)
 	err = srv.checkpoint(c, srv.addpeer)
 	if err != nil {
-		clog.Trace("Rejected peer", "err", err)
+		clog.Error("Rejected peer", "err", err)
 		return err
 	}
 	// If the checks completed successfully, runPeer has now been
 	// launched by run.
-	clog.Trace("connection set up", "inbound", dialDest == nil)
+	clog.Error("connection set up", "inbound", dialDest == nil)
 	return nil
 }
 
 // run is the main loop that the server runs.
 func (srv *MultiChannelServer) run(dialstate dialer) {
-	logger.Debug("[p2p.Server] start MultiChannel p2p server")
+	logger.Error("[p2p.Server] start MultiChannel p2p server")
 	defer srv.loopWG.Done()
 	var (
 		peers         = make(map[discover.NodeID]*Peer)
@@ -654,7 +662,7 @@ running:
 			// This channel is used by AddPeer to add to the
 			// ephemeral static peer list. Add it to the dialer,
 			// it will keep the node connected.
-			srv.logger.Debug("Adding static node", "node", n)
+			srv.logger.Error("Adding static node", "node", n)
 			dialstate.addStatic(n)
 		case n := <-srv.removestatic:
 			// This channel is used by RemovePeer to send a
@@ -677,6 +685,7 @@ running:
 			dialstate.taskDone(t, time.Now())
 			delTask(t)
 		case c := <-srv.posthandshake:
+			srv.logger.Error("MultiChannelServer.run posthandshake", "conn", c.String())
 			// A connection has passed the encryption handshake so
 			// the remote identity is known (but hasn't been verified yet).
 			if trusted[c.id] {
@@ -694,6 +703,7 @@ running:
 			var e error
 			// At this point the connection is past the protocol handshake.
 			// Its capabilities are known and the remote identity is verified.
+			logger.Error("MultiChannelServer.protoHandshakeChecks addpeer", "peers num", len(peers)+1, "id", c.id, "addr", c.fd.RemoteAddr())
 			err := srv.protoHandshakeChecks(peers, inboundCount, c)
 			if err == nil {
 				if c.multiChannel {
@@ -715,11 +725,13 @@ running:
 					}
 
 					if count == 0 {
+						srv.logger.Error("MultiChannelServer.Adding newPeer", "peers", len(peers)+1, "peer", c.String())
 						p, e = newPeer(connSet, srv.Protocols, srv.Config.RWTimerConfig)
 						srv.CandidateConns[c.id] = nil
 					}
 				} else {
 					// The handshakes are done and it passed all checks.
+					srv.logger.Error("MultiChannelServer.Adding newPeer no multi chann", "peers", len(peers)+1, "peer", c.String())
 					p, e = newPeer([]*conn{c}, srv.Protocols, srv.Config.RWTimerConfig)
 				}
 
@@ -731,8 +743,9 @@ running:
 					if srv.EnableMsgEvents {
 						p.events = &srv.peerFeed
 					}
+					srv.logger.Error("MultiChannelServer.Adding truncateName", "peers", len(peers)+1, "peer", c.String())
 					name := truncateName(c.name)
-					srv.logger.Debug("Adding p2p peer", "name", name, "addr", c.fd.RemoteAddr(), "peers", len(peers)+1)
+					srv.logger.Error("MultiChannelServer.Adding p2p peer", "name", name, "addr", c.fd.RemoteAddr(), "peers", len(peers)+1)
 					go srv.runPeer(p)
 					peers[c.id] = p
 
@@ -745,6 +758,7 @@ running:
 			// discarded. Unblock the task last.
 			select {
 			case c.cont <- err:
+				logger.Error("c.cont <- err", "peers num", len(peers), "addpeer", c.id)
 			case <-srv.quit:
 				break running
 			}
@@ -843,6 +857,8 @@ func updatesConnectionMetric(inboundCount int, outboundCount int) {
 // it waits until the Peer logic returns and removes
 // the peer.
 func (srv *MultiChannelServer) runPeer(p *Peer) {
+	p.logger.Error("MultiChannelServer.runPeer", "peer num", len(p.rws), "1peer", p.rws[0].String())
+
 	if srv.newPeerHook != nil {
 		srv.newPeerHook(p)
 	}
@@ -1650,6 +1666,7 @@ func (srv *BaseServer) SetupConn(fd net.Conn, flags connFlag, dialDest *discover
 		return errors.New("shutdown")
 	}
 
+	logger.Error("BaseServer.SetupConn", "id", dialDest.ID, "addr", &net.TCPAddr{IP: dialDest.IP, Port: int(dialDest.TCP)})
 	c := &conn{fd: fd, transport: srv.newTransport(fd), flags: flags, conntype: common.ConnTypeUndefined, cont: make(chan error), portOrder: ConnDefault}
 	err := srv.setupConn(c, flags, dialDest)
 	if err != nil {
@@ -1670,50 +1687,52 @@ func (srv *BaseServer) setupConn(c *conn, flags connFlag, dialDest *discover.Nod
 
 	var err error
 	// Run the connection type handshake
+	logger.Error("BaseServer.doConnTypeHandshake", "id", dialDest.ID, "addr", &net.TCPAddr{IP: dialDest.IP, Port: int(dialDest.TCP)})
 	if c.conntype, err = c.doConnTypeHandshake(srv.ConnectionType); err != nil {
 		srv.logger.Warn("Failed doConnTypeHandshake", "addr", c.fd.RemoteAddr(), "conn", c.flags,
 			"conntype", c.conntype, "err", err)
 		return err
 	}
-	srv.logger.Trace("Connection Type Trace", "addr", c.fd.RemoteAddr(), "conn", c.flags, "ConnType", c.conntype.String())
+	srv.logger.Error("BaseServer Connection Type Trace", "addr", c.fd.RemoteAddr(), "conn", c.flags, "ConnType", c.conntype.String())
 
 	// Run the encryption handshake.
 	if c.id, err = c.doEncHandshake(srv.PrivateKey, dialDest); err != nil {
-		srv.logger.Trace("Failed RLPx handshake", "addr", c.fd.RemoteAddr(), "conn", c.flags, "err", err)
+		srv.logger.Trace("BaseServer Failed RLPx handshake", "addr", c.fd.RemoteAddr(), "conn", c.flags, "err", err)
 		return err
 	}
 
 	clog := srv.logger.NewWith("id", c.id, "addr", c.fd.RemoteAddr(), "conn", c.flags)
 	// For dialed connections, check that the remote public key matches.
 	if dialDest != nil && c.id != dialDest.ID {
-		clog.Trace("Dialed identity mismatch", "want", c, dialDest.ID)
+		clog.Error("BaseServer Dialed identity mismatch", "want", c, dialDest.ID)
 		return DiscUnexpectedIdentity
 	}
 	err = srv.checkpoint(c, srv.posthandshake)
 	if err != nil {
-		clog.Trace("Rejected peer before protocol handshake", "err", err)
+		clog.Error("BaseServer Rejected peer before protocol handshake", "err", err)
 		return err
 	}
 	// Run the protocol handshake
 	phs, err := c.doProtoHandshake(srv.ourHandshake)
 	if err != nil {
-		clog.Trace("Failed protobuf handshake", "err", err)
+		clog.Error("BaseServer Failed protobuf handshake", "err", err)
 		return err
 	}
 	if phs.ID != c.id {
-		clog.Trace("Wrong devp2p handshake identity", "err", phs.ID)
+		clog.Error("BaseServer Wrong devp2p handshake identity", "err", phs.ID)
 		return DiscUnexpectedIdentity
 	}
 	c.caps, c.name, c.multiChannel = phs.Caps, phs.Name, phs.Multichannel
 
+	clog.Error("BaseServer checkpoint", "err", phs.ID)
 	err = srv.checkpoint(c, srv.addpeer)
 	if err != nil {
-		clog.Trace("Rejected peer", "err", err)
+		clog.Error("Rejected peer", "err", err)
 		return err
 	}
 	// If the checks completed successfully, runPeer has now been
 	// launched by run.
-	clog.Trace("connection set up", "inbound", dialDest == nil)
+	clog.Error("BaseServer connection set up", "inbound", dialDest == nil)
 	return nil
 }
 

@@ -74,7 +74,7 @@ func NewNode(id NodeID, ip net.IP, udpPort, tcpPort uint16, nType NodeType) *Nod
 		IP:    ip,
 		UDP:   udpPort,
 		TCP:   tcpPort,
-		TCPs:  []uint16{},
+		TCPs:  []uint16{32323, 32324},
 		ID:    id,
 		NType: nType,
 		sha:   crypto.Keccak256Hash(id[:]),

@@ -26,12 +26,13 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"net"
+	"time"
+
 	"github.com/klaytn/klaytn/crypto"
 	"github.com/klaytn/klaytn/networks/p2p/nat"
 	"github.com/klaytn/klaytn/networks/p2p/netutil"
 	"github.com/klaytn/klaytn/ser/rlp"
-	"net"
-	"time"
 )
 
 const Version = 4
@@ -671,25 +672,25 @@ func decodePacket(buf []byte) (packet, NodeID, []byte, error) {
 }
 
 func (req *ping) handle(t *udp, from *net.UDPAddr, fromID NodeID, mac []byte) error {
-	logger.Trace("udp: ping: received", "from", fromID, "req.NetworkId", req.NetworkID,
+	logger.Trace("[ping] udp: ping: received", "from", fromID, "req.NetworkId", req.NetworkID,
 		"myNetworkId", t.networkID)
 
-	logger.Trace("udp: ping: send pong", "to", fromID)
+	logger.Trace("[ping] udp: ping: send pong", "to", fromID)
 	if !t.Discovery.IsAuthorized(fromID, req.From.NType) {
-		logger.Trace("unauthorized node.", "nodeid", fromID, "nodetype", req.From.NType)
+		logger.Trace("[ping] unauthorized node.", "nodeid", fromID, "nodetype", req.From.NType)
 		return errUnauthorized
 	} else {
-		logger.Debug("authorized node.", "nodeid", fromID, "nodetype", req.From.NType)
+		logger.Debug("[ping] authorized node.", "nodeid", fromID, "nodetype", req.From.NType)
 	}
 
 	if req.NetworkID != t.networkID {
-		logger.Debug("udp: ping: mismatch networkid", "local", t.networkID, "remote", req.NetworkID)
+		logger.Debug("[ping] udp: ping: mismatch networkid", "local", t.networkID, "remote", req.NetworkID)
 		mismatchNetworkCounter.Mark(1)
 		return errMismatchNetwork
 	}
 
 	if expired(req.Expiration) {
-		logger.Trace("udp: ping: expired", "from", fromID)
+		logger.Trace("[ping] udp: ping: expired", "from", fromID)
 		return errExpired
 	}
 

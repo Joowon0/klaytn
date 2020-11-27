@@ -285,7 +285,7 @@ func (tab *Table) findNewNode(seeds *nodesByDistance, targetID NodeID, targetNT 
 	if targetNT != NodeTypeBN {
 		seeds.entries = removeBn(seeds.entries)
 	}
-	tab.localLogger.Debug("findNewNode: found nodes", "length", len(seeds.entries), "nodeType", targetNT)
+	tab.localLogger.Debug("[discover] findNewNode: found nodes", "length", len(seeds.entries), "nodeType", targetNT)
 	return seeds.entries
 }
 

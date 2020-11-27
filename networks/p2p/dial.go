@@ -273,6 +273,8 @@ func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now 
 		s.start = now
 	}
 
+	logger.Error("Start newTasks", "running", nRunning, "peers", peers)
+
 	var newtasks []task
 	addDialTask := func(flag connFlag, n *discover.Node) bool {
 		logger.Trace("[Dial] Try to add dialTask", "connFlag", flag, "node", n)
@@ -464,9 +466,11 @@ func (s *dialstate) checkDial(n *discover.Node, peers map[discover.NodeID]*Peer)
 func (s *dialstate) taskDone(t task, now time.Time) {
 	switch t := t.(type) {
 	case *dialTask:
+		logger.Trace("[Dial] dialTask - done", "id", t.dest.ID, "ip", t.dest.IP)
 		s.hist.add(t.dest.ID, now.Add(dialHistoryExpiration))
 		delete(s.dialing, t.dest.ID)
 	case *discoverTask:
+		logger.Trace("[Dial] discoverTask - done", "result count", len(t.results), "1", t.results[0])
 		s.lookupRunning = false
 		s.lookupBuf = append(s.lookupBuf, t.results...)
 	case *discoverTypedStaticTask:
@@ -556,7 +560,7 @@ type dialError struct {
 // dial performs the actual connection attempt.
 func (t *dialTask) dial(srv Server, dest *discover.Node) error {
 	dialTryCounter.Inc(1)
-	logger.Debug("[Dial] Dialing node", "id", dest.ID, "addr", &net.TCPAddr{IP: dest.IP, Port: int(dest.TCP)})
+	logger.Error("[Dial] Dialing node", "id", dest.ID, "addr", &net.TCPAddr{IP: dest.IP, Port: int(dest.TCP)})
 
 	fd, err := srv.Dial(dest)
 	if err != nil {

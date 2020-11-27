@@ -194,6 +194,7 @@ func (p *Peer) GetNumberInboundAndOutbound() (int, int) {
 
 // newPeer should be called to create a peer.
 func newPeer(conns []*conn, protocols []Protocol, tc RWTimerConfig) (*Peer, error) {
+	logger.Error("newPeer", "peers num", len(conns)+1)
 	if conns == nil || len(conns) < 1 || conns[ConnDefault] == nil {
 		return nil, errors.New("conn is invalid")
 	}
@@ -219,6 +220,7 @@ func (p *Peer) Log() log.Logger {
 }
 
 func (p *Peer) run() (remoteRequested bool, err error) {
+	logger.Error("Peer.run", "id", p.ID(), "ip", p.RemoteAddr())
 	var (
 		writeStart = make(chan struct{}, 1)
 		writeErr   = make(chan error, 1)
@@ -314,6 +316,7 @@ func (p *Peer) runWithRWs() (remoteRequested bool, err error) {
 
 	select {
 	case errs = <-resultErr:
+		logger.Error("Peer.runWithRWs handleErr resultErr", "err", errs, "peer num", len(p.rws), "1peer", p.rws[0].String())
 		close(p.closed)
 	}
 	p.wg.Wait()
@@ -497,6 +500,7 @@ func (p *Peer) startProtocols(writeStart <-chan struct{}, writeErr chan<- error)
 		go func() {
 			//p.wg.Add(1)
 			defer p.wg.Done()
+			logger.Error("Peer.startProtocols proto.Run", "id", p.ID(), "ip", p.RemoteAddr())
 			err := proto.Run(p, rw)
 			if err == nil {
 				p.logger.Trace(fmt.Sprintf("Protocol %s/%d returned", proto.Name, proto.Version))
@@ -514,6 +518,7 @@ func (p *Peer) startProtocols(writeStart <-chan struct{}, writeErr chan<- error)
 // startProtocolsWithRWs run the protocol using several RWs.
 func (p *Peer) startProtocolsWithRWs(writeStarts []chan struct{}, writeErrs []chan error) {
 	p.wg.Add(len(p.running))
+	p.logger.Error("Peer.startProtocolsWithRWs", "runningProto num", len(p.running))
 
 	for _, protos := range p.running {
 		rws := make([]MsgReadWriter, 0, len(protos))
@@ -534,16 +539,16 @@ func (p *Peer) startProtocolsWithRWs(writeStarts []chan struct{}, writeErrs []ch
 			rws = append(rws, rw)
 		}
 
-		p.logger.Trace(fmt.Sprintf("Starting protocol %s/%d", protos[ConnDefault].Name, protos[ConnDefault].Version))
+		p.logger.Error("Starting protocol", "connName", protos[ConnDefault].Name, "connVer", protos[ConnDefault].Version)
 		go func() {
 			//p.wg.Add(1)
 			defer p.wg.Done()
 			err := protos[ConnDefault].RunWithRWs(p, rws)
 			if err == nil {
-				p.logger.Trace(fmt.Sprintf("Protocol %s/%d returned", protos[ConnDefault].Name, protos[ConnDefault].Version))
+				p.logger.Error("Protocol returned", "connName", protos[ConnDefault].Name, "connVer", protos[ConnDefault].Version)
 				err = errProtocolReturned
 			} else if err != io.EOF {
-				p.logger.Error(fmt.Sprintf("Protocol %s/%d failed", protos[ConnDefault].Name, protos[ConnDefault].Version), "err", err)
+				p.logger.Error("Protocol failed", "connName", protos[ConnDefault].Name, "connVer", protos[ConnDefault].Version, "err", err)
 			}
 			p.protoErr <- err
 			p.logger.Debug(fmt.Sprintf("Protocol go routine stopped, peer: %v", p.ID()))

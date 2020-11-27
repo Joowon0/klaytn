@@ -174,6 +174,7 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 			Version: version,
 			Length:  protocol.Lengths[i],
 			Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {
+				logger.Trace("NewProtocolManager.Run", "id", p.ID(), "ip", p.RemoteAddr())
 				peer := manager.newPeer(int(version), p, rw)
 				pubKey, err := p.ID().Pubkey()
 				if err != nil {
