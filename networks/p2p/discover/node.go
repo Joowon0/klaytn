@@ -115,22 +115,24 @@ func (n *Node) validateComplete() error {
 // Please see ParseNode for a description of the format.
 func (n *Node) String() string {
 	u := url.URL{Scheme: "kni"}
+	var query []string
 	if n.Incomplete() {
 		u.Host = fmt.Sprintf("%x", n.ID[:])
 	} else {
 		addr := net.TCPAddr{IP: n.IP, Port: int(n.TCP)}
 		u.User = url.User(fmt.Sprintf("%x", n.ID[:]))
 		u.Host = addr.String()
+		for _, tcp := range n.GetSubports() {
+			query = append(query, "subport="+strconv.Itoa(int(tcp)))
+		}
 		if n.UDP != n.TCP {
-			u.RawQuery = "discport=" + strconv.Itoa(int(n.UDP))
+			query = append(query, "discport="+strconv.Itoa(int(n.UDP)))
 		}
 	}
 	if n.NType != NodeTypeUnknown {
-		if u.RawQuery != "" {
-			u.RawQuery = u.RawQuery + "&"
-		}
-		u.RawQuery = u.RawQuery + "ntype=" + StringNodeType(n.NType)
+		query = append(query, "ntype="+StringNodeType(n.NType))
 	}
+	u.RawQuery = strings.Join(query, "&")
 	return u.String()
 }
 
@@ -270,10 +272,24 @@ func (n *Node) CompareNode(tn *Node) bool {
 	if n.TCP != tn.TCP {
 		return false
 	}
+	for _, tcp := range n.TCPs {
+		if !containsUint16(tn.TCPs, tcp) {
+			return false
+		}
+	}
 	if n.UDP != tn.UDP {
 		return false
 	}
 	return true
+}
+
+func containsUint16(slice []uint16, item uint16) bool {
+	for _, i := range slice {
+		if i == item {
+			return true
+		}
+	}
+	return false
 }
 
 // AddSubport add a new port to TCPs
@@ -288,6 +304,20 @@ func (n *Node) AddSubport(port uint16) {
 		}
 	}
 	n.TCPs = append(n.TCPs, port)
+}
+
+// AddSubport gets a list of subports without the main port
+func (n *Node) GetSubports() []uint16 {
+	if len(n.TCPs) == 0 {
+		return []uint16{}
+	}
+	subports := make([]uint16, len(n.TCPs)-1)
+	for _, subport := range n.TCPs {
+		if subport != n.TCP {
+			subports = append(subports, subport)
+		}
+	}
+	return subports
 }
 
 // NodeID is a unique identifier for each node.
