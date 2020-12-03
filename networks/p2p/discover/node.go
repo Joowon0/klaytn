@@ -47,7 +47,7 @@ const NodeIDBits = 512
 type Node struct {
 	IP       net.IP   // len 4 for IPv4 or 16 for IPv6
 	UDP, TCP uint16   // port numbers
-	TCPs     []uint16 // port numbers
+	TCPs     []uint16 // subport numbers
 	ID       NodeID   // the node's public key
 	NType    NodeType // the node's type (cn, pn, en, bn)
 
@@ -162,7 +162,7 @@ var lookupIPFunc = net.LookupIP
 // a node with IP address 10.3.58.6, TCP listening port 30303
 // and UDP discovery port 30301.
 //
-//    kni://<hex node id>@10.3.58.6:30303?discport=30301[&ntype=cn|pn|en|bn]
+//    kni://<hex node id>@10.3.58.6:30303?subport=30304&discport=30301[&ntype=cn|pn|en|bn]
 //    enode://<hex node id>@10.3.58.6:30303?discport=30301[&ntype=cn|pn|en|bn]
 func ParseNode(rawurl string) (*Node, error) {
 	if m := incompleteNodeURL.FindStringSubmatch(rawurl); m != nil {
