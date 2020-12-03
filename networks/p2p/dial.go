@@ -22,14 +22,14 @@ package p2p
 
 import (
 	"container/heap"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"github.com/klaytn/klaytn/common/math"
 	"net"
 	"time"
 
-	"crypto/ecdsa"
+	"github.com/klaytn/klaytn/common/math"
 	"github.com/klaytn/klaytn/networks/p2p/discover"
 	"github.com/klaytn/klaytn/networks/p2p/netutil"
 )
@@ -67,7 +67,7 @@ type TCPDialer struct {
 
 // Dial creates a TCP connection to the node.
 func (t TCPDialer) Dial(dest *discover.Node) (net.Conn, error) {
-	addr := &net.TCPAddr{IP: dest.IP, Port: int(dest.TCP)}
+	addr := &net.TCPAddr{IP: dest.IP, Port: int(dest.TCPs[0])}
 	return t.Dialer.Dial("tcp", addr.String())
 }
 
@@ -278,12 +278,12 @@ func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now 
 		logger.Trace("[Dial] Try to add dialTask", "connFlag", flag, "node", n)
 		if err := s.checkDial(n, peers); err != nil {
 			logger.Trace("[Dial] Skipping dial candidate from discovery nodes", "id", n.ID,
-				"addr", &net.TCPAddr{IP: n.IP, Port: int(n.TCP)}, "err", err)
+				"NodeType", n.NType, "ip", n.IP, "port", n.TCPs, "err", err)
 			return false
 		}
 		s.dialing[n.ID] = flag
-		logger.Debug("[Dial] Add dial candidate from discovery nodes", "id", n.ID, "addr",
-			&net.TCPAddr{IP: n.IP, Port: int(n.TCP)})
+		logger.Debug("[Dial] Add dial candidate from discovery nodes", "id", n.ID,
+			"NodeType", n.NType, "ip", n.IP, "port", n.TCPs)
 		newtasks = append(newtasks, &dialTask{flags: flag, dest: n})
 		return true
 	}
@@ -344,32 +344,26 @@ func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now 
 			switch err {
 			case errNotWhitelisted, errSelf:
 				logger.Info("[Dial] Removing static dial candidate from static nodes", "id",
-					t.dest.ID, "addr", &net.TCPAddr{IP: t.dest.IP, Port: int(t.dest.TCP)}, "err", err)
+					t.dest.ID, "NodeType", t.dest.NType, "ip", t.dest.IP, "port", t.dest.TCPs, "err", err)
 				delete(s.static, t.dest.ID)
 				cnt[t.dialType]--
 			case errExpired:
 				logger.Info("[Dial] Removing expired dial candidate from static nodes", "id",
-					t.dest.ID, "addr", &net.TCPAddr{IP: t.dest.IP, Port: int(t.dest.TCP)}, "dialType", t.dialType,
+					t.dest.ID, "dialType", t.dialType, "ip", t.dest.IP, "port", t.dest.TCPs,
 					"dialCount", cnt[t.dialType], "err", err)
 				delete(s.static, t.dest.ID)
 				cnt[t.dialType]--
 			case errExceedMaxTypedDial:
 				logger.Info("[Dial] Removing exceeded dial candidate from static nodes", "id",
-					t.dest.ID, "addr", &net.TCPAddr{IP: t.dest.IP, Port: int(t.dest.TCP)}, "dialType", t.dialType,
-					"dialCount", cnt[t.dialType], "err", err,
-				)
+					t.dest.ID, "dialType", t.dialType, "ip", t.dest.IP, "port", t.dest.TCPs,
+					"dialCount", cnt[t.dialType], "err", err)
 				delete(s.static, t.dest.ID)
 				cnt[t.dialType]--
 			case nil:
 				s.dialing[id] = t.flags
 				newtasks = append(newtasks, t)
-				if len(t.dest.TCPs) > 0 { // Check if the server use multi-port.
-					logger.Info("[Dial] Add dial candidate from static nodes", "id", t.dest.ID,
-						"NodeType", t.dest.NType, "ip", t.dest.IP, "port", t.dest.TCPs)
-				} else {
-					logger.Info("[Dial] Add dial candidate from static nodes", "id", t.dest.ID,
-						"NodeType", t.dest.NType, "ip", t.dest.IP, "port", t.dest.TCP)
-				}
+				logger.Info("[Dial] Add dial candidate from static nodes", "id", t.dest.ID,
+					"NodeType", t.dest.NType, "ip", t.dest.IP, "port", t.dest.TCPs)
 			default:
 				logger.Trace("[Dial] Skipped addStaticDial", "reason", err, "to", t.dest)
 			}
@@ -404,6 +398,7 @@ func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now 
 		n := s.ntab.ReadRandomNodes(s.randomNodes, discover.NodeTypeEN)
 		for i := 0; i < randomCandidates && i < n; i++ {
 			if addDialTask(dynDialedConn, s.randomNodes[i]) {
+				fmt.Println("Random Nodes from discovery", s.randomNodes[i])
 				needDynDials--
 			}
 		}
@@ -413,6 +408,7 @@ func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now 
 	i := 0
 	for ; i < len(s.lookupBuf) && needDynDials > 0; i++ {
 		if addDialTask(dynDialedConn, s.lookupBuf[i]) {
+			fmt.Println("Random Nodes from lookupBuf", s.lookupBuf[i])
 			needDynDials--
 		}
 	}
@@ -545,7 +541,7 @@ func (t *dialTask) resolve(srv Server, nType discover.NodeType) bool {
 	// The node was found.
 	t.resolveDelay = initialResolveDelay
 	t.dest = resolved
-	logger.Debug("Resolved node", "id", t.dest.ID, "addr", &net.TCPAddr{IP: t.dest.IP, Port: int(t.dest.TCP)})
+	logger.Debug("Resolved node", "id", t.dest.ID, "ip", t.dest.IP, "port", t.dest.TCPs)
 	return true
 }
 
@@ -556,7 +552,7 @@ type dialError struct {
 // dial performs the actual connection attempt.
 func (t *dialTask) dial(srv Server, dest *discover.Node) error {
 	dialTryCounter.Inc(1)
-	logger.Debug("[Dial] Dialing node", "id", dest.ID, "addr", &net.TCPAddr{IP: dest.IP, Port: int(dest.TCP)})
+	logger.Debug("[Dial] Dialing node", "id", dest.ID, "addr", &net.TCPAddr{IP: dest.IP, Port: int(dest.TCPs[0])})
 
 	fd, err := srv.Dial(dest)
 	if err != nil {
@@ -600,7 +596,14 @@ func (t *dialTask) dialMulti(srv Server, dest *discover.Node) error {
 }
 
 func (t *dialTask) String() string {
-	return fmt.Sprintf("%v %x %v:%d", t.flags, t.dest.ID[:8], t.dest.IP, t.dest.TCP)
+	result := fmt.Sprintf("%v %x %v", t.flags, t.dest.ID[:8], t.dest.IP)
+	if len(t.dest.TCPs) >= 1 {
+		result += fmt.Sprintf(":%d", t.dest.TCPs[0])
+		if len(t.dest.TCPs) >= 2 {
+			result += fmt.Sprintf(" subport=%v", t.dest.TCPs[1:])
+		}
+	}
+	return result
 }
 
 func (t *discoverTask) Do(srv Server) {

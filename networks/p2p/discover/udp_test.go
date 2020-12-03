@@ -313,6 +313,8 @@ func TestUDP_findnodeMultiReply(t *testing.T) {
 		MustParseNode("kni://9bffefd833d53fac8e652415f4973bee289e8b1a5c6c4cbe70abf817ce8a64cee11b823b66a987f51aaa9fba0d6a91b3e6bf0d5a5d1042de8e9eeea057b217f8@10.0.1.18:30301?discport=17"),
 		MustParseNode("kni://1b5b4aa662d7cb44a7221bfba67302590b643028197a7d5214790f3bac7aaa4a3241be9e83c09cf1f6c69d007c634faae3dc1b1221793e8446c0b3a09de65960@10.0.1.19:30303"),
 	}
+	fmt.Println("MustParseNode")
+	fmt.Println(list)
 	rpclist := make([]rpcNode, len(list))
 	for i := range list {
 		rpclist[i] = nodeToRPC(list[i])
@@ -391,8 +393,8 @@ func TestUDP_successfulPing(t *testing.T) {
 		if int(n.UDP) != test.remoteaddr.Port {
 			t.Errorf("node has wrong UDP port: got %v, want: %v", n.UDP, test.remoteaddr.Port)
 		}
-		if n.TCP != testRemote.TCP {
-			t.Errorf("node has wrong TCP port: got %v, want: %v", n.TCP, testRemote.TCP)
+		if n.TCPs[0] != testRemote.TCP {
+			t.Errorf("node has wrong TCP port: got %v, want: %v", n.TCPs[0], testRemote.TCP)
 		}
 	case <-time.After(2 * time.Second):
 		t.Errorf("node was not added within 2 seconds")

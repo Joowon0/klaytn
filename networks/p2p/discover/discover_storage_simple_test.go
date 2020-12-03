@@ -18,18 +18,19 @@ package discover
 
 import (
 	"crypto/rand"
-	"github.com/klaytn/klaytn/common"
-	"github.com/klaytn/klaytn/crypto"
-	"github.com/pkg/errors"
 	rand2 "math/rand"
 	"net"
 	"testing"
+
+	"github.com/klaytn/klaytn/common"
+	"github.com/klaytn/klaytn/crypto"
+	"github.com/pkg/errors"
 )
 
 var (
 	testData = [5][]*Node{
 		NodeTypeUnknown: {
-			MustParseNode("kni://2d2d43be39c40e1b104952cc351127fb3783b66ca065ba4b8c46f6e73e603e511203e399154c5b96c8ca13f8dd9086f6d29c74867a3b7ea6bd4f0205b25522b6@0.0.0.1:32323?discport=32323"),
+			MustParseNode("kni://2d2d43be39c40e1b104952cc351127fb3783b66ca065ba4b8c46f6e73e603e511203e399154c5b96c8ca13f8dd9086f6d29c74867a3b7ea6bd4f0205b25522b6@0.0.0.1:32323?discport=32323&connport=32323&connport=32324"),
 			MustParseNode("kni://e2fc0988b6286fd15a9c208bdf283fb456575357911d618e2f47326ce534db1f94c3a1edc6cb7a399797b35ad7dd82a2647ba9ec43b33948302cefb9edd2c9b2@0.0.0.2:32323?discport=32323"),
 			MustParseNode("kni://e898d53588ed46888ace5a6a61c2ca71034ae23aa004b8525a5045a5a51d43dd72b9ca49b346ed0155cc6e2cd143486109a6fe21845a59778012994ea7d9e128@0.0.0.3:32323?discport=32323"),
 			MustParseNode("kni://79ce147a6e955cbf43004e19480c4d8139eeb71ec99ee872499e4cb05e37ec711049781702200f958698246475e7bcf898acad261d1950c280abf5090ea00ac0@0.0.0.4:32323?discport=32323"),

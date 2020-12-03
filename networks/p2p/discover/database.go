@@ -193,6 +193,9 @@ func (db *nodeDB) node(id NodeID) *Node {
 		return nil
 	}
 	node.sha = crypto.Keccak256Hash(node.ID[:])
+	if len(node.TCPs) == 0 {
+		node.TCPs = []uint16{0}
+	}
 	return node
 }
 

@@ -23,15 +23,16 @@ package p2p
 import (
 	"crypto/ecdsa"
 	"errors"
-	"github.com/klaytn/klaytn/common"
-	"github.com/klaytn/klaytn/crypto"
-	"github.com/klaytn/klaytn/crypto/sha3"
-	"github.com/klaytn/klaytn/networks/p2p/discover"
 	"math/rand"
 	"net"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/klaytn/klaytn/common"
+	"github.com/klaytn/klaytn/crypto"
+	"github.com/klaytn/klaytn/crypto/sha3"
+	"github.com/klaytn/klaytn/networks/p2p/discover"
 )
 
 func init() {
@@ -278,7 +279,7 @@ func TestServerDial(t *testing.T) {
 
 	// tell the server to connect
 	tcpAddr := listener.Addr().(*net.TCPAddr)
-	srv.AddPeer(&discover.Node{ID: remid, IP: tcpAddr.IP, TCP: uint16(tcpAddr.Port)})
+	srv.AddPeer(&discover.Node{ID: remid, IP: tcpAddr.IP, TCPs: []uint16{uint16(tcpAddr.Port)}})
 
 	select {
 	case conn := <-accepted:

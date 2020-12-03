@@ -218,10 +218,8 @@ func fillBucket(tab *Table, n *Node) (last *Node) {
 // nodeAtDistance creates a node for which logdist(base, n.sha) == ld.
 // The node's ID does not correspond to n.sha.
 func nodeAtDistance(base common.Hash, ld int, nType NodeType) (n *Node) {
-	n = new(Node)
+	n = NewNode(NodeID{}, net.IP{byte(ld), 0, 2, byte(ld)}, 0, nil, nType)
 	n.sha = hashAtDistance(base, ld)
-	n.IP = net.IP{byte(ld), 0, 2, byte(ld)}
-	n.NType = nType
 	copy(n.ID[:], n.sha[:]) // ensure the node still has a unique ID
 	return n
 }
@@ -379,7 +377,7 @@ func (*closeTest) Generate(rand *rand.Rand, size int) reflect.Value {
 		N:      rand.Intn(bucketSize),
 	}
 	for _, id := range gen([]NodeID{}, rand).([]NodeID) {
-		t.All = append(t.All, &Node{ID: id})
+		t.All = append(t.All, NewNode(id, nil, 0, nil, 0))
 	}
 	return reflect.ValueOf(t)
 }

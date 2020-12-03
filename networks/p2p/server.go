@@ -1109,7 +1109,7 @@ func (srv *BaseServer) Self() *discover.Node {
 	defer srv.lock.Unlock()
 
 	if !srv.running {
-		return &discover.Node{IP: net.ParseIP("0.0.0.0")}
+		return &discover.Node{IP: net.ParseIP("0.0.0.0"), TCPs: []uint16{0}}
 	}
 	return srv.makeSelf(srv.listener, srv.ntab)
 }
@@ -1125,9 +1125,9 @@ func (srv *BaseServer) makeSelf(listener net.Listener, discovery discover.Discov
 		// Otherwise inject the listener address too
 		addr := listener.Addr().(*net.TCPAddr)
 		return &discover.Node{
-			ID:  discover.PubkeyID(&srv.PrivateKey.PublicKey),
-			IP:  addr.IP,
-			TCP: uint16(addr.Port),
+			ID:   discover.PubkeyID(&srv.PrivateKey.PublicKey),
+			IP:   addr.IP,
+			TCPs: []uint16{uint16(addr.Port)},
 		}
 	}
 	// Otherwise return the discovery node.
@@ -1797,7 +1797,7 @@ func (srv *BaseServer) NodeInfo() *NodeInfo {
 		Protocols:  make(map[string]interface{}),
 	}
 	info.Ports.Discovery = int(node.UDP)
-	info.Ports.Listener = int(node.TCP)
+	info.Ports.Listener = int(node.TCPs[0])
 
 	// Gather all the running protocol infos (only once per protocol type)
 	for _, proto := range srv.Protocols {

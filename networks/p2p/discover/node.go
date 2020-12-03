@@ -45,11 +45,11 @@ const NodeIDBits = 512
 // Node represents a host on the network.
 // The fields of Node may not be modified.
 type Node struct {
-	IP       net.IP   // len 4 for IPv4 or 16 for IPv6
-	UDP, TCP uint16   // port numbers
-	TCPs     []uint16 // port numbers
-	ID       NodeID   // the node's public key
-	NType    NodeType // the node's type (cn, pn, en, bn)
+	IP    net.IP   // len 4 for IPv4 or 16 for IPv6
+	UDP   uint16   // discovery port number
+	TCPs  []uint16 // TCP listening port numbers
+	ID    NodeID   // the node's public key
+	NType NodeType // the node's type (cn, pn, en, bn)
 
 	// This is a cached copy of sha3(ID) which is used for node
 	// distance calculations. This is part of Node in order to make it
@@ -66,15 +66,22 @@ type Node struct {
 
 // NewNode creates a new node. It is mostly meant to be used for
 // testing purposes.
-func NewNode(id NodeID, ip net.IP, udpPort uint16, tcpPort []uint16, nType NodeType) *Node {
+func NewNodeByID(id NodeID) *Node {
+	return NewNode(id, nil, 0, nil, 0)
+}
+
+// NewNode creates a new node.
+func NewNode(id NodeID, ip net.IP, udpPort uint16, tcpPorts []uint16, nType NodeType) *Node {
 	if ipv4 := ip.To4(); ipv4 != nil {
 		ip = ipv4
+	}
+	if len(tcpPorts) == 0 {
+		tcpPorts = []uint16{0}
 	}
 	return &Node{
 		IP:    ip,
 		UDP:   udpPort,
-		TCP:   tcpPort[0],
-		TCPs:  tcpPort,
+		TCPs:  tcpPorts,
 		ID:    id,
 		NType: nType,
 		sha:   crypto.Keccak256Hash(id[:]),
@@ -98,7 +105,7 @@ func (n *Node) validateComplete() error {
 	if n.UDP == 0 {
 		return errors.New("missing UDP port")
 	}
-	if n.TCP == 0 {
+	if len(n.TCPs) == 0 {
 		return errors.New("missing TCP port")
 	}
 	if n.IP.IsMulticast() || n.IP.IsUnspecified() {
@@ -112,22 +119,27 @@ func (n *Node) validateComplete() error {
 // Please see ParseNode for a description of the format.
 func (n *Node) String() string {
 	u := url.URL{Scheme: "kni"}
+	var queries []string
 	if n.Incomplete() {
 		u.Host = fmt.Sprintf("%x", n.ID[:])
 	} else {
-		addr := net.TCPAddr{IP: n.IP, Port: int(n.TCP)}
+		if len(n.TCPs) == 0 {
+			n.TCPs = []uint16{0}
+		}
+		addr := net.TCPAddr{IP: n.IP, Port: int(n.TCPs[0])}
 		u.User = url.User(fmt.Sprintf("%x", n.ID[:]))
 		u.Host = addr.String()
-		if n.UDP != n.TCP {
-			u.RawQuery = "discport=" + strconv.Itoa(int(n.UDP))
+		for _, subport := range n.TCPs[1:] {
+			queries = append(queries, "subport="+strconv.Itoa(int(subport)))
+		}
+		if n.UDP != n.TCPs[0] {
+			queries = append(queries, "discport="+strconv.Itoa(int(n.UDP)))
 		}
 	}
 	if n.NType != NodeTypeUnknown {
-		if u.RawQuery != "" {
-			u.RawQuery = u.RawQuery + "&"
-		}
-		u.RawQuery = u.RawQuery + "ntype=" + StringNodeType(n.NType)
+		queries = append(queries, "ntype="+StringNodeType(n.NType))
 	}
+	u.RawQuery = strings.Join(queries, "&")
 	return u.String()
 }
 
@@ -208,8 +220,22 @@ func parseComplete(rawurl string) (*Node, error) {
 	if tcpPort, err = strconv.ParseUint(u.Port(), 10, 16); err != nil {
 		return nil, errors.New("invalid port")
 	}
-	udpPort = tcpPort
+	// Extract subport from query
 	qv := u.Query()
+	tcpPorts := []uint16{uint16(tcpPort)}
+	if qv.Get("subport") != "" {
+		for _, subport := range qv["subport"] {
+			logger.Error("parsing subport", "subport", subport)
+			p, err := strconv.ParseUint(subport, 10, 16)
+			if err != nil {
+				logger.Warn("skipping invalid subport in query", "subport", p)
+			} else {
+				tcpPorts = append(tcpPorts, uint16(p))
+			}
+		}
+	}
+	// Extract discovery port from query
+	udpPort = tcpPort
 	if qv.Get("discport") != "" {
 		udpPort, err = strconv.ParseUint(qv.Get("discport"), 10, 16)
 		if err != nil {
@@ -221,7 +247,7 @@ func parseComplete(rawurl string) (*Node, error) {
 	if qv.Get("ntype") != "" {
 		nType = ParseNodeType(qv.Get("ntype"))
 	}
-	return NewNode(id, ip, uint16(udpPort), []uint16{uint16(tcpPort)}, nType), nil
+	return NewNode(id, ip, uint16(udpPort), tcpPorts, nType), nil
 }
 
 // MustParseNode parses a node URL. It panics if the URL is not valid.
@@ -252,13 +278,26 @@ func (n *Node) CompareNode(tn *Node) bool {
 	if n.ID != tn.ID {
 		return false
 	}
-	if n.TCP != tn.TCP {
+	if len(n.TCPs) != len(tn.TCPs) {
 		return false
+	}
+	for _, tcp := range n.TCPs {
+		if !containsUint16(tn.TCPs, tcp) {
+			return false
+		}
 	}
 	if n.UDP != tn.UDP {
 		return false
 	}
 	return true
+}
+func containsUint16(slice []uint16, item uint16) bool {
+	for _, i := range slice {
+		if i == item {
+			return true
+		}
+	}
+	return false
 }
 
 // NodeID is a unique identifier for each node.

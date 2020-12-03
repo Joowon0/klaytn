@@ -25,12 +25,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
-	"github.com/klaytn/klaytn/crypto"
-	"github.com/klaytn/klaytn/crypto/ecies"
-	"github.com/klaytn/klaytn/crypto/sha3"
-	"github.com/klaytn/klaytn/networks/p2p/discover"
-	"github.com/klaytn/klaytn/ser/rlp"
 	"io"
 	"io/ioutil"
 	"net"
@@ -39,6 +33,13 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/davecgh/go-spew/spew"
+	"github.com/klaytn/klaytn/crypto"
+	"github.com/klaytn/klaytn/crypto/ecies"
+	"github.com/klaytn/klaytn/crypto/sha3"
+	"github.com/klaytn/klaytn/networks/p2p/discover"
+	"github.com/klaytn/klaytn/ser/rlp"
 )
 
 func TestSharedSecret(t *testing.T) {
@@ -99,7 +100,7 @@ func testEncHandshake(token []byte) error {
 		defer func() { output <- r }()
 		defer fd0.Close()
 
-		dest := &discover.Node{ID: discover.PubkeyID(&prv1.PublicKey)}
+		dest := discover.NewNode(discover.PubkeyID(&prv1.PublicKey), nil, 0, nil, 0)
 		r.id, r.err = c0.doEncHandshake(prv0, dest)
 		if r.err != nil {
 			return
@@ -152,11 +153,12 @@ func testEncHandshake(token []byte) error {
 func TestProtocolHandshake(t *testing.T) {
 	var (
 		prv0, _ = crypto.GenerateKey()
-		node0   = &discover.Node{ID: discover.PubkeyID(&prv0.PublicKey), IP: net.IP{1, 2, 3, 4}, TCP: 33}
-		hs0     = &protoHandshake{Version: 3, ID: node0.ID, Caps: []Cap{{"a", 0}, {"b", 2}}, ListenPort: []uint64{30303}}
+
+		node0 = discover.NewNode(discover.PubkeyID(&prv0.PublicKey), net.IP{1, 2, 3, 4}, 0, []uint16{33}, 0)
+		hs0   = &protoHandshake{Version: 3, ID: node0.ID, Caps: []Cap{{"a", 0}, {"b", 2}}, ListenPort: []uint64{30303}}
 
 		prv1, _ = crypto.GenerateKey()
-		node1   = &discover.Node{ID: discover.PubkeyID(&prv1.PublicKey), IP: net.IP{5, 6, 7, 8}, TCP: 44}
+		node1   = discover.NewNode(discover.PubkeyID(&prv1.PublicKey), net.IP{5, 6, 7, 8}, 0, []uint16{44}, 0)
 		hs1     = &protoHandshake{Version: 3, ID: node1.ID, Caps: []Cap{{"c", 1}, {"d", 3}}, ListenPort: []uint64{30303}}
 
 		wg sync.WaitGroup
