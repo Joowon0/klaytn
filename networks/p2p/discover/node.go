@@ -66,15 +66,15 @@ type Node struct {
 
 // NewNode creates a new node. It is mostly meant to be used for
 // testing purposes.
-func NewNode(id NodeID, ip net.IP, udpPort, tcpPort uint16, nType NodeType) *Node {
+func NewNode(id NodeID, ip net.IP, udpPort uint16, tcpPort []uint16, nType NodeType) *Node {
 	if ipv4 := ip.To4(); ipv4 != nil {
 		ip = ipv4
 	}
 	return &Node{
 		IP:    ip,
 		UDP:   udpPort,
-		TCP:   tcpPort,
-		TCPs:  []uint16{},
+		TCP:   tcpPort[0],
+		TCPs:  tcpPort,
 		ID:    id,
 		NType: nType,
 		sha:   crypto.Keccak256Hash(id[:]),
@@ -165,7 +165,7 @@ func ParseNode(rawurl string) (*Node, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid node ID (%v)", err)
 		}
-		return NewNode(id, nil, 0, 0, NodeTypeUnknown), nil
+		return NewNode(id, nil, 0, []uint16{0}, NodeTypeUnknown), nil
 	}
 	return parseComplete(rawurl)
 }
@@ -221,7 +221,7 @@ func parseComplete(rawurl string) (*Node, error) {
 	if qv.Get("ntype") != "" {
 		nType = ParseNodeType(qv.Get("ntype"))
 	}
-	return NewNode(id, ip, uint16(udpPort), uint16(tcpPort), nType), nil
+	return NewNode(id, ip, uint16(udpPort), []uint16{uint16(tcpPort)}, nType), nil
 }
 
 // MustParseNode parses a node URL. It panics if the URL is not valid.

@@ -18,17 +18,9 @@
 package setup
 
 import (
+	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
-	"github.com/klaytn/klaytn/accounts/keystore"
-	"github.com/klaytn/klaytn/blockchain"
-	"github.com/klaytn/klaytn/cmd/homi/docker/compose"
-	"github.com/klaytn/klaytn/cmd/homi/docker/service"
-	"github.com/klaytn/klaytn/cmd/homi/genesis"
-	"github.com/klaytn/klaytn/crypto"
-	"github.com/klaytn/klaytn/log"
-	"github.com/klaytn/klaytn/params"
-	"gopkg.in/urfave/cli.v1"
 	"io/ioutil"
 	"math/big"
 	"math/rand"
@@ -40,10 +32,18 @@ import (
 	"strings"
 	"time"
 
-	"crypto/ecdsa"
+	"github.com/klaytn/klaytn/accounts/keystore"
+	"github.com/klaytn/klaytn/blockchain"
 	istcommon "github.com/klaytn/klaytn/cmd/homi/common"
+	"github.com/klaytn/klaytn/cmd/homi/docker/compose"
+	"github.com/klaytn/klaytn/cmd/homi/docker/service"
+	"github.com/klaytn/klaytn/cmd/homi/genesis"
 	"github.com/klaytn/klaytn/common"
+	"github.com/klaytn/klaytn/crypto"
+	"github.com/klaytn/klaytn/log"
 	"github.com/klaytn/klaytn/networks/p2p/discover"
+	"github.com/klaytn/klaytn/params"
+	"gopkg.in/urfave/cli.v1"
 )
 
 type ValidatorInfo struct {
@@ -729,7 +729,7 @@ func makeValidators(num int, isWorkOnSingleHost bool, nodeAddrs []common.Address
 				discover.PubkeyID(&keys[i].PublicKey),
 				net.ParseIP("0.0.0.0"),
 				0,
-				validatorPort,
+				[]uint16{validatorPort},
 				discover.NodeTypeCN).String(),
 		}
 		validators = append(validators, v)
@@ -765,7 +765,7 @@ func makeValidatorsWithIp(num int, isWorkOnSingleHost bool, nodeAddrs []common.A
 				discover.PubkeyID(&keys[i].PublicKey),
 				net.ParseIP(fmt.Sprintf("%s.%d", networkIds[idx], 100+(i/nn)+1)),
 				0,
-				validatorPort,
+				[]uint16{validatorPort},
 				discover.NodeTypeCN).String(),
 		}
 		validators = append(validators, v)
@@ -794,7 +794,7 @@ func makeProxys(num int, isWorkOnSingleHost bool) ([]*ValidatorInfo, []string) {
 				discover.PubkeyID(&privKeys[i].PublicKey),
 				net.ParseIP("0.0.0.0"),
 				0,
-				p2pPort,
+				[]uint16{p2pPort},
 				discover.NodeTypePN).String(),
 		}
 		proxies = append(proxies, v)
@@ -824,7 +824,7 @@ func makeEndpoints(num int, isWorkOnSingleHost bool) ([]*ValidatorInfo, []string
 				discover.PubkeyID(&privKeys[i].PublicKey),
 				net.ParseIP("0.0.0.0"),
 				0,
-				p2pPort,
+				[]uint16{p2pPort},
 				discover.NodeTypeEN).String(),
 		}
 		endpoints = append(endpoints, v)
@@ -854,7 +854,7 @@ func makeSCNs(num int, isWorkOnSingleHost bool) ([]*ValidatorInfo, []string) {
 				discover.PubkeyID(&privKeys[i].PublicKey),
 				net.ParseIP("0.0.0.0"),
 				0,
-				p2pPort,
+				[]uint16{p2pPort},
 				discover.NodeTypeUnknown).String(),
 		}
 		scn = append(scn, v)
@@ -884,7 +884,7 @@ func makeSPNs(num int, isWorkOnSingleHost bool) ([]*ValidatorInfo, []string) {
 				discover.PubkeyID(&privKeys[i].PublicKey),
 				net.ParseIP("0.0.0.0"),
 				0,
-				p2pPort,
+				[]uint16{p2pPort},
 				discover.NodeTypeUnknown).String(),
 		}
 		proxies = append(proxies, v)
@@ -914,7 +914,7 @@ func makeSENs(num int, isWorkOnSingleHost bool) ([]*ValidatorInfo, []string) {
 				discover.PubkeyID(&privKeys[i].PublicKey),
 				net.ParseIP("0.0.0.0"),
 				0,
-				p2pPort,
+				[]uint16{p2pPort},
 				discover.NodeTypeUnknown).String(),
 		}
 		endpoints = append(endpoints, v)
