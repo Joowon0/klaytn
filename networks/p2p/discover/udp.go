@@ -156,7 +156,7 @@ func (t *udp) nodeFromRPC(sender *net.UDPAddr, rn rpcNode) (*Node, error) {
 	if t.netrestrict != nil && !t.netrestrict.Contains(rn.IP) {
 		return nil, errors.New("not contained in netrestrict whitelist")
 	}
-	n := NewNode(rn.ID, rn.IP, rn.UDP, rn.TCP, rn.NType)
+	n := NewNode(rn.ID, rn.IP, rn.UDP, rn.TCP, nil, rn.NType)
 	err := n.validateComplete()
 	return n, err
 }

@@ -66,15 +66,18 @@ type Node struct {
 
 // NewNode creates a new node. It is mostly meant to be used for
 // testing purposes.
-func NewNode(id NodeID, ip net.IP, udpPort, tcpPort uint16, nType NodeType) *Node {
+func NewNode(id NodeID, ip net.IP, udpPort, tcpPort uint16, tcpSubPort []uint16, nType NodeType) *Node {
 	if ipv4 := ip.To4(); ipv4 != nil {
 		ip = ipv4
+	}
+	if tcpSubPort == nil {
+		tcpSubPort = []uint16{}
 	}
 	return &Node{
 		IP:    ip,
 		UDP:   udpPort,
 		TCP:   tcpPort,
-		TCPs:  []uint16{},
+		TCPs:  tcpSubPort,
 		ID:    id,
 		NType: nType,
 		sha:   crypto.Keccak256Hash(id[:]),
@@ -165,7 +168,7 @@ func ParseNode(rawurl string) (*Node, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid node ID (%v)", err)
 		}
-		return NewNode(id, nil, 0, 0, NodeTypeUnknown), nil
+		return NewNode(id, nil, 0, 0, nil, NodeTypeUnknown), nil
 	}
 	return parseComplete(rawurl)
 }
@@ -174,6 +177,7 @@ func parseComplete(rawurl string) (*Node, error) {
 	var (
 		id               NodeID
 		tcpPort, udpPort uint64
+		tcpSubports      []uint16
 	)
 	u, err := url.Parse(rawurl)
 	if err != nil {
@@ -208,8 +212,20 @@ func parseComplete(rawurl string) (*Node, error) {
 	if tcpPort, err = strconv.ParseUint(u.Port(), 10, 16); err != nil {
 		return nil, errors.New("invalid port")
 	}
-	udpPort = tcpPort
+	// Extract subport from query
 	qv := u.Query()
+	if qv.Get("subport") != "" {
+		for _, subport := range qv["subport"] {
+			p, err := strconv.ParseUint(subport, 10, 16)
+			if err != nil {
+				logger.Warn("skipping invalid subport in query", "subport", p, "id", id, "ip", ip)
+			} else {
+				tcpSubports = append(tcpSubports, uint16(p))
+			}
+		}
+	}
+	// Extract discovery port from query
+	udpPort = tcpPort
 	if qv.Get("discport") != "" {
 		udpPort, err = strconv.ParseUint(qv.Get("discport"), 10, 16)
 		if err != nil {
@@ -221,7 +237,7 @@ func parseComplete(rawurl string) (*Node, error) {
 	if qv.Get("ntype") != "" {
 		nType = ParseNodeType(qv.Get("ntype"))
 	}
-	return NewNode(id, ip, uint16(udpPort), uint16(tcpPort), nType), nil
+	return NewNode(id, ip, uint16(udpPort), uint16(tcpPort), tcpSubports, nType), nil
 }
 
 // MustParseNode parses a node URL. It panics if the URL is not valid.

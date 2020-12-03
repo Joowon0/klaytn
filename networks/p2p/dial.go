@@ -22,14 +22,14 @@ package p2p
 
 import (
 	"container/heap"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"github.com/klaytn/klaytn/common/math"
 	"net"
 	"time"
 
-	"crypto/ecdsa"
+	"github.com/klaytn/klaytn/common/math"
 	"github.com/klaytn/klaytn/networks/p2p/discover"
 	"github.com/klaytn/klaytn/networks/p2p/netutil"
 )
@@ -600,7 +600,7 @@ func (t *dialTask) dialMulti(srv Server, dest *discover.Node) error {
 }
 
 func (t *dialTask) String() string {
-	return fmt.Sprintf("%v %x %v:%d", t.flags, t.dest.ID[:8], t.dest.IP, t.dest.TCP)
+	return fmt.Sprintf("%v %x %v:%d subport=%v", t.flags, t.dest.ID[:8], t.dest.IP, t.dest.TCP, t.dest.TCPs)
 }
 
 func (t *discoverTask) Do(srv Server) {
