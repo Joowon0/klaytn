@@ -8,29 +8,37 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const fetchNum = 100 // 20 batches : the number of items to fetch each time
+const fetchNum = 500 // the number of items to fetch each time
 
 var quitChan chan bool
 
 var workspace = "/Users/joowon/dev/src/github.com/klaytn/klaytn/en_test/data/klay/chaindata/"
-
-var ldbWorkSpace = workspace + "/" + dbBaseDirs[StateTrieDB]
 var workspace2 = "/Users/joowon/dev/src/github.com/klaytn/klaytn/en_db_migration/data/klay/chaindata/"
+
+//var workspace = "/Users/joowon/dev/src/github.com/klaytn/klaytn/en_db_migration2/data/klay/chaindata/"
+//var workspace2 = "/Users/joowon/dev/src/github.com/klaytn/klaytn/en_db_migration3/data/klay/chaindata/"
+var ldbWorkSpace = workspace + "/" + dbBaseDirs[StateTrieDB]
 var ldbWorkSpace2 = workspace2 + "/" + dbBaseDirs[StateTrieDB]
 
 func TestMigrate(t *testing.T) {
 	// create source DB
-	dbc := &DBConfig{Dir: ldbWorkSpace, DBType: LevelDB, SingleDB: false, LevelDBCacheSize: 128, OpenFilesLimit: 128, NumStateTrieShards: 4}
+	srcShard := uint(4)
+	dbc := &DBConfig{Dir: ldbWorkSpace, DBType: LevelDB, SingleDB: false, LevelDBCacheSize: 128, OpenFilesLimit: 128, NumStateTrieShards: srcShard}
+	srcDB, err := newShardedDB(dbc, StateTrieDB, srcShard)
+	//dbc := &DBConfig{Dir: ldbWorkSpace, DBType: LevelDB, SingleDB: true, LevelDBCacheSize: 128, OpenFilesLimit: 128, NumStateTrieShards: 1}
+	//srcDB, err := NewLevelDB(dbc, StateTrieDB)
 
-	srcDB, err := newShardedDB(dbc, StateTrieDB, 4)
 	if err != nil {
 		t.Fatal("failed to create levelDB err:%w dbconfig:%w", err.Error(), dbc)
 	}
 	defer srcDB.Close()
 
 	// create dst DB
-	dbc2 := &DBConfig{Dir: ldbWorkSpace2, DBType: LevelDB, SingleDB: false, LevelDBCacheSize: 128, OpenFilesLimit: 128, NumStateTrieShards: 2}
-	dstDB, err := newShardedDB(dbc2, StateTrieDB, 2)
+	dstShard := uint(2)
+	dbc2 := &DBConfig{Dir: ldbWorkSpace2, DBType: LevelDB, SingleDB: false, LevelDBCacheSize: 128, OpenFilesLimit: 128, NumStateTrieShards: dstShard}
+	dstDB, err := newShardedDB(dbc2, StateTrieDB, dstShard)
+	//dbc2 := &DBConfig{Dir: ldbWorkSpace2, DBType: LevelDB, SingleDB: true, LevelDBCacheSize: 128, OpenFilesLimit: 128, NumStateTrieShards: 1}
+	//dstDB, err := NewLevelDB(dbc2, StateTrieDB)
 	if err != nil {
 		t.Fatal("failed to create levelDB err:%w dbconfig:%w", err.Error(), dbc)
 	}
@@ -42,6 +50,7 @@ func TestMigrate(t *testing.T) {
 	dstBatch := dstDB.NewBatch()
 
 	// create iterator and iterate
+	//time.Sleep(time.Second)
 	entries, fetched := iterateDB(t, srcIter, fetchNum)
 	iterateNum := 0
 	fmt.Println("first iterateDB", "fetched=", fetched)
@@ -51,7 +60,7 @@ func TestMigrate(t *testing.T) {
 			dstBatch.Put(entries[i].key, entries[i].val)
 		}
 
-		entries, fetched = iterateDB(t, srcIter, 500)
+		entries, fetched = iterateDB(t, srcIter, fetchNum)
 		iterateNum++
 	}
 
@@ -68,7 +77,7 @@ func TestStop(t *testing.T) {
 }
 
 func iterateDB(t *testing.T, iter Iterator, num int) ([]entry, int) {
-	time.Sleep(time.Second)
+	time.Sleep(10 * time.Millisecond) // TODO : erase sleep (this creates nil type referenced)
 	entries := make([]entry, num)
 	var i int
 	for i = 0; i < num && iter.Next(); i++ {
