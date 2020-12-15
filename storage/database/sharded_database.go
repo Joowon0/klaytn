@@ -17,6 +17,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"strconv"
@@ -75,6 +76,7 @@ func newShardedDB(dbc *DBConfig, et DBEntryType, numShards uint) (*shardedDB, er
 		go batchWriteWorker(pdbBatchTaskCh)
 	}
 
+	fmt.Println("DIR", dbc.Dir)
 	return &shardedDB{
 		fn: dbc.Dir, shards: shards,
 		numShards: numShards, pdbBatchTaskCh: pdbBatchTaskCh}, nil
@@ -151,23 +153,105 @@ func (pdb *shardedDB) Close() {
 	}
 }
 
-type shardedDBIterator struct {
-	// TODO-Klaytn implement this later.
-	iterators []Iterator
-	key       []byte
-	value     []byte
+type entry struct {
+	key []byte
+	val []byte
+}
 
-	//numBatches uint
-	//
-	//taskCh   chan pdbBatchTask
-	//resultCh chan pdbBatchResult
+type shardedDBChIterator struct {
+	ctx context.Context
+
+	iterators []Iterator
+	resultChs []chan entry
+}
+
+func NewshardedDBChIterator(ctx context.Context, shards []Database) shardedDBChIterator {
+	numShards := len(shards)
+	it := shardedDBChIterator{ctx,
+		make([]Iterator, numShards),
+		make([]chan entry, numShards)}
+
+	if it.ctx == nil {
+		it.ctx = context.Background()
+	}
+
+	for i := 0; i < numShards; i++ {
+		it.iterators[i] = shards[i].NewIterator()
+		//fmt.Println(it.iterators[i].Next())
+		//fmt.Println(it.iterators[i].Value())
+		it.resultChs[i] = make(chan entry, 10)
+		go it.newChanWorker(i)
+	}
+
+	return it
+}
+
+func (it *shardedDBChIterator) newChanWorker(i int) {
+	fmt.Println("start newChanWorker", i)
+	for it.iterators[i].Next() {
+		select {
+		case <-it.ctx.Done():
+			fmt.Println("newChanWorker finished", "i", i)
+			return
+		default:
+		}
+		key := make([]byte, len(it.iterators[i].Key()))
+		val := make([]byte, len(it.iterators[i].Value()))
+		copy(key, it.iterators[i].Key())
+		copy(val, it.iterators[i].Value())
+		it.resultChs[i] <- entry{key, val}
+	}
+}
+
+//func (pdb *shardedDBIterator) NewIteratorWithStart(start []byte) Iterator {
+//}
+//func (pdb *shardedDBIterator) NewIteratorWithPrefix(prefix []byte) Iterator {
+//}
+
+func (it *shardedDBChIterator) Channels() []chan entry {
+	return it.resultChs
+}
+
+type shardedDBIterator struct {
+	shardedDBChIterator
+
+	ctx context.Context
+
+	resultCh chan entry
+	key      []byte // current key
+	value    []byte // current value
 }
 
 // NewIterator creates a binary-alphabetical iterator over the entire keyspace
 // contained within the key-value database.
 func (pdb *shardedDB) NewIterator() Iterator {
-	// TODO-Klaytn implement this later.
-	return nil
+	ctx := context.Background()
+
+	it := &shardedDBIterator{NewshardedDBChIterator(ctx, pdb.shards),
+		ctx,
+		make(chan entry, 100),
+		nil, nil}
+
+	go it.NewCombineWorker()
+
+	return it
+}
+
+func (it shardedDBIterator) NewCombineWorker() {
+	for {
+		for _, ch := range it.resultChs {
+			select {
+			case <-it.ctx.Done():
+				fmt.Println("done called")
+				return
+			case e := <-ch:
+				//fmt.Println("item from channel", "i", i)
+				it.resultCh <- e
+			default:
+			}
+		}
+	}
+
 }
 
 // NewIteratorWithStart creates a binary-alphabetical iterator over a subset of
@@ -175,20 +259,21 @@ func (pdb *shardedDB) NewIterator() Iterator {
 // not exist).
 func (pdb *shardedDB) NewIteratorWithStart(start []byte) Iterator {
 	// TODO-Klaytn implement this later.
-	iterators := make([]Iterator, 0, pdb.numShards)
-	for i := 0; i < int(pdb.numShards); i++ {
-		iterators = append(iterators, pdb.shards[i].NewIteratorWithStart(start))
-	}
-
-	for _, iter := range iterators {
-		if iter != nil {
-			if !iter.Next() {
-				iter = nil
-			}
-		}
-	}
-
-	return &shardedDBIterator{iterators, nil, nil}
+	//iterators := make([]Iterator, 0, pdb.numShards)
+	//for i := 0; i < int(pdb.numShards); i++ {
+	//	iterators = append(iterators, pdb.shards[i].NewIteratorWithStart(start))
+	//}
+	//
+	//for _, iter := range iterators {
+	//	if iter != nil {
+	//		if !iter.Next() {
+	//			iter = nil
+	//		}
+	//	}
+	//}
+	//
+	//return &shardedDBIterator{iterators, nil, nil}
+	return nil
 }
 
 // NewIteratorWithPrefix creates a binary-alphabetical iterator over a subset
@@ -199,54 +284,47 @@ func (pdb *shardedDB) NewIteratorWithPrefix(prefix []byte) Iterator {
 }
 
 func (pdi *shardedDBIterator) Next() bool {
-	// TODO-Klaytn implement this later.
-	//var minIter Iterator
-	//minIdx := -1
-	//minKey := []byte{0}
-	//minKeyValue := []byte{0}
-	//
-	//for idx, iter := range pdi.iterators {
-	//	if iter != nil {
-	//		if bytes.Compare(minKey, iter.Key()) >= 0 {
-	//			minIdx = idx
-	//			minIter = iter
-	//			minKey = iter.Key()
-	//			minKeyValue = iter.Value()
-	//		}
-	//	}
-	//}
-	//
-	//if minIter == nil {
-	//	return false
-	//}
-	//
-	//pdi.key = minKey
-	//pdi.value = minKeyValue
-	//
-	//if !minIter.Next() {
-	//	pdi.iterators[minIdx] = nil
-	//}
-	//
-	return true
+	select {
+	case e, ok := <-pdi.resultCh:
+		//fmt.Println("fetched item in resultCh")
+		if ok {
+			pdi.key = e.key
+			pdi.value = e.val
+			return true
+		} else {
+			fmt.Println("Channel closed")
+		}
+	default:
+		fmt.Println("No value ready")
+	}
+
+	return false
 }
 
 func (pdi *shardedDBIterator) Error() error {
-	// TODO-Klaytn implement this later.
-	return nil
+	var err error
+	for i, iter := range pdi.iterators {
+		if iter.Error() != nil {
+			logger.Error("Error in shardedDBIterator", "err", err, "shardNum", i, "key", pdi.key, "val", pdi.value)
+			err = iter.Error()
+		}
+	}
+	return err
 }
 
 func (pdi *shardedDBIterator) Key() []byte {
-	// TODO-Klaytn implement this later.
-	return nil
+	return pdi.key
 }
 
 func (pdi *shardedDBIterator) Value() []byte {
-	// TODO-Klaytn implement this later.
-	return nil
+	return pdi.value
 }
 
 func (pdi *shardedDBIterator) Release() {
-	// TODO-Klaytn implement this later.
+	for _, iter := range pdi.iterators {
+		iter.Release()
+	}
+	pdi.ctx.Done()
 }
 
 func (pdb *shardedDB) NewBatch() Batch {
