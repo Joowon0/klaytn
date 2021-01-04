@@ -10,8 +10,29 @@
 
 package prque
 
+import (
+	"bytes"
+	"github.com/klaytn/klaytn/log"
+)
+
 // The size of a block of data
 const blockSize = 4096
+
+type Types int
+const (
+	Int Types = iota
+	Int64
+	Uint64
+	ByteSlice
+)
+
+func (t Types) isValid() bool {
+	switch t {
+	case Int, Int64, Uint64, ByteSlice:
+		return true
+	}
+	return false
+}
 
 // A prioritized item in the sorted stack.
 //
@@ -19,7 +40,7 @@ const blockSize = 4096
 // The difference between the lowest and highest priorities in the queue at any point should be less than 2^63.
 type item struct {
 	value    interface{}
-	priority int64
+	priority interface{}
 }
 
 // Internal sortable stack data structure. Implements the Push and Pop ops for
@@ -29,17 +50,27 @@ type sstack struct {
 	size     int
 	capacity int
 	offset   int
+	reverse  bool // reverse the result of Less()
 
+	priorityType Types
 	blocks [][]*item
 	active []*item
 }
 
+var logger = log.NewModuleLogger(log.Common)
+
 // Creates a new, empty stack.
-func newSstack() *sstack {
+func newSstack(priorityType Types, reverse bool) *sstack {
+	if !priorityType.isValid() {
+		logger.Crit("Invalid sstack", "priorityType", priorityType)
+		return nil
+	}
 	result := new(sstack)
 	result.active = make([]*item, blockSize)
 	result.blocks = [][]*item{result.active}
 	result.capacity = blockSize
+	result.priorityType = priorityType
+	result.reverse = reverse
 	return result
 }
 
@@ -81,7 +112,34 @@ func (s *sstack) Len() int {
 // Compares the priority of two elements of the stack (higher is first).
 // Required by sort.Interface.
 func (s *sstack) Less(i, j int) bool {
-	return (s.blocks[i/blockSize][i%blockSize].priority - s.blocks[j/blockSize][j%blockSize].priority) > 0
+	var result bool
+
+	switch s.priorityType {
+	case Int:
+		i := (s.blocks[i/blockSize][i%blockSize].priority).(int)
+		j := (s.blocks[j/blockSize][j%blockSize].priority).(int)
+		result = (i - j) > 0
+	case Int64:
+		i := (s.blocks[i/blockSize][i%blockSize].priority).(int64)
+		j := (s.blocks[j/blockSize][j%blockSize].priority).(int64)
+		result = (i - j) > 0
+	case Uint64:
+		i := (s.blocks[i/blockSize][i%blockSize].priority).(uint64)
+		j := (s.blocks[j/blockSize][j%blockSize].priority).(uint64)
+		result = (i - j) > 0
+	case ByteSlice:
+		i := (s.blocks[i/blockSize][i%blockSize].priority).([]byte)
+		j := (s.blocks[j/blockSize][j%blockSize].priority).([]byte)
+		result = bytes.Compare(i, j) > 0
+	default:
+		// This should not happen
+		return false
+	}
+
+	if s.reverse {
+		return !result
+	}
+	return result
 }
 
 // Swaps two elements in the stack. Required by sort.Interface.
@@ -92,5 +150,5 @@ func (s *sstack) Swap(i, j int) {
 
 // Resets the stack, effectively clearing its contents.
 func (s *sstack) Reset() {
-	*s = *newSstack()
+	*s = *newSstack(s.priorityType, s.reverse)
 }
