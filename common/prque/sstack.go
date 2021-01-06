@@ -38,6 +38,7 @@ func (t Types) isValid() bool {
 //
 // Note: priorities can "wrap around" the int64 range, a comes before b if (a.priority - b.priority) > 0.
 // The difference between the lowest and highest priorities in the queue at any point should be less than 2^63.
+// To add a new type, add it in Types, isValid() and Less().
 type item struct {
 	value    interface{}
 	priority interface{}
