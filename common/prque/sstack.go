@@ -62,7 +62,7 @@ var logger = log.NewModuleLogger(log.Common)
 // Creates a new, empty stack.
 func newSstack(priorityType Types, reverse bool) *sstack {
 	if !priorityType.isValid() {
-		logger.Crit("Invalid sstack", "priorityType", priorityType)
+		logger.Crit("Invalid type in sstack", "priorityType", priorityType)
 		return nil
 	}
 	result := new(sstack)
@@ -118,21 +118,25 @@ func (s *sstack) Less(i, j int) bool {
 	case Int:
 		i := (s.blocks[i/blockSize][i%blockSize].priority).(int)
 		j := (s.blocks[j/blockSize][j%blockSize].priority).(int)
-		result = (i - j) > 0
+		result = i > j
 	case Int64:
 		i := (s.blocks[i/blockSize][i%blockSize].priority).(int64)
 		j := (s.blocks[j/blockSize][j%blockSize].priority).(int64)
-		result = (i - j) > 0
+		if i == j {
+			return false
+		}
+		result  = i > j
 	case Uint64:
 		i := (s.blocks[i/blockSize][i%blockSize].priority).(uint64)
 		j := (s.blocks[j/blockSize][j%blockSize].priority).(uint64)
-		result = (i - j) > 0
+		result = i > j
 	case ByteSlice:
 		i := (s.blocks[i/blockSize][i%blockSize].priority).([]byte)
 		j := (s.blocks[j/blockSize][j%blockSize].priority).([]byte)
 		result = bytes.Compare(i, j) > 0
 	default:
 		// This should not happen
+		logger.Crit("Invalid type pushed in sstack")
 		return false
 	}
 

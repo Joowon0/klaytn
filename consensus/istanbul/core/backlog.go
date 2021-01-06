@@ -95,7 +95,7 @@ func (c *core) storeBacklog(msg *message, src istanbul.Validator) {
 
 	backlog := c.backlogs[src.Address()]
 	if backlog == nil {
-		backlog = prque.New()
+		backlog = prque.New(prque.Int64, false)
 	}
 	switch msg.Code {
 	case msgPreprepare:
