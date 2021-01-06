@@ -12,6 +12,7 @@ package prque
 
 import (
 	"bytes"
+
 	"github.com/klaytn/klaytn/log"
 )
 
@@ -19,6 +20,7 @@ import (
 const blockSize = 4096
 
 type Types int
+
 const (
 	Int Types = iota
 	Int64
@@ -54,8 +56,8 @@ type sstack struct {
 	reverse  bool // reverse the result of Less()
 
 	priorityType Types
-	blocks [][]*item
-	active []*item
+	blocks       [][]*item
+	active       []*item
 }
 
 var logger = log.NewModuleLogger(log.Common)
@@ -126,7 +128,7 @@ func (s *sstack) Less(i, j int) bool {
 		if i == j {
 			return false
 		}
-		result  = i > j
+		result = i > j
 	case Uint64:
 		i := (s.blocks[i/blockSize][i%blockSize].priority).(uint64)
 		j := (s.blocks[j/blockSize][j%blockSize].priority).(uint64)
