@@ -61,7 +61,7 @@ var defaultLevelDBOption = &opt.Options{
 	OpenFilesCacheCapacity: MinOpenFilesCacheCapacity,
 	Filter:                 filter.NewBloomFilter(minBitsPerKeyForFilter),
 	DisableBufferPool:      false,
-	DisableSeeksCompaction: true,
+	DisableSeeksCompaction: false,
 }
 
 // GetDefaultLevelDBOption returns default LevelDB option copied from defaultLevelDBOption.
@@ -131,7 +131,7 @@ func getLevelDBOptions(dbc *DBConfig) *opt.Options {
 		DisableBufferPool:             !dbc.LevelDBBufferPool,
 		CompactionTableSize:           2 * opt.MiB,
 		CompactionTableSizeMultiplier: 1.0,
-		DisableSeeksCompaction:        true,
+		DisableSeeksCompaction:        false,
 	}
 
 	return newOption
